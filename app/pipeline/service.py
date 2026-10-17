@@ -127,6 +127,11 @@ def convert_bytes(filename: str, data: bytes, options: VectorizeOptions | None =
                              (time.perf_counter() - t0) * 1000, [msg], error=msg)
 
     _tick("preprocess")
+    if opts.mode in {'fidelity', 'pixel_exact'}:
+        from .fidelity import convert_source
+        if opts.spot_colors:
+            raise ValueError('保真档保留原色，不支持同时指定替换专色')
+        return convert_source(filename, img, opts, with_preview, progress)
     t_preprocess = time.perf_counter()
     prepared = preprocess(img)
     preprocess_ms = (time.perf_counter() - t_preprocess) * 1000

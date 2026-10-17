@@ -422,8 +422,6 @@ def fit_contour(contour: np.ndarray, tolerance: float = 1.0,
     corners = mark_corners(simplified, corner_angle) if closed and smooth else np.ones(len(simplified), dtype=bool)
     if closed and smooth:
         smooth_at = ~corners
-        if not smooth_at.any():
-            smooth_at = np.ones(len(simplified), dtype=bool)
     else:
         smooth_at = np.ones(len(simplified), dtype=bool)
 

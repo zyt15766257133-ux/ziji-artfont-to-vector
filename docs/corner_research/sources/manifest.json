@@ -1,0 +1,99 @@
+{
+  "retrieved_utc": "2026-10-17T12:34:37.905597+00:00",
+  "sources": [
+    {
+      "id": "illustrator",
+      "url": "https://helpx.adobe.com/illustrator/using/image-trace.html",
+      "status": "error",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "id": "inkscape",
+      "url": "https://inkscape.org/doc/tutorials/tracing/tutorial-tracing.html",
+      "final_url": "https://inkscape.org/doc/tutorials/tracing/tutorial-tracing.html",
+      "characters": 5326,
+      "status": "ok"
+    },
+    {
+      "id": "potrace",
+      "url": "https://potrace.sourceforge.net/",
+      "status": "error",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "id": "potrace-man",
+      "url": "https://potrace.sourceforge.net/potrace.1.html",
+      "status": "error",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "id": "vectormagic",
+      "url": "https://vectormagic.com/",
+      "final_url": "https://vectormagic.com/",
+      "characters": 12201,
+      "status": "ok"
+    },
+    {
+      "id": "vectorizer-ai",
+      "url": "https://vectorizer.ai/",
+      "final_url": "https://vectorizer.ai/",
+      "characters": 14642,
+      "status": "ok"
+    },
+    {
+      "id": "vtracer",
+      "url": "https://raw.githubusercontent.com/visioncortex/vtracer/master/README.md",
+      "final_url": "https://raw.githubusercontent.com/visioncortex/vtracer/master/README.md",
+      "characters": 11864,
+      "status": "ok"
+    },
+    {
+      "id": "svgcode",
+      "url": "https://raw.githubusercontent.com/tomayac/SVGcode/main/README.md",
+      "final_url": "https://raw.githubusercontent.com/tomayac/SVGcode/main/README.md",
+      "characters": 4735,
+      "status": "ok"
+    },
+    {
+      "id": "polyfit",
+      "url": "https://www.cs.ubc.ca/labs/imager/tr/2020/ClipArtVectorization/",
+      "final_url": "https://www.cs.ubc.ca/labs/imager/tr/2020/ClipArtVectorization/",
+      "characters": 3714,
+      "status": "ok"
+    },
+    {
+      "id": "keypoint-flow",
+      "url": "https://puhachov.xyz/publications/keypoint-driven-polyvector-flow/",
+      "final_url": "https://puhachov.xyz/publications/keypoint-driven-polyvector-flow/",
+      "characters": 2613,
+      "status": "ok"
+    },
+    {
+      "id": "polyvector",
+      "url": "https://arxiv.org/html/1801.01922v2",
+      "status": "error",
+      "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)>"
+    },
+    {
+      "id": "live",
+      "url": "https://raw.githubusercontent.com/Picsart-AI-Research/LIVE-Layerwise-Image-Vectorization/main/README.md",
+      "final_url": "https://raw.githubusercontent.com/Picsart-AI-Research/LIVE-Layerwise-Image-Vectorization/main/README.md",
+      "characters": 4135,
+      "status": "ok"
+    },
+    {
+      "id": "hanmo",
+      "url": "https://www.hanmoai.com/detail/19.html",
+      "final_url": "https://www.hanmoai.com/detail/19.html",
+      "characters": 446,
+      "status": "ok"
+    },
+    {
+      "id": "pixso",
+      "url": "https://pixso.cn/designskills/image-to-svg-online-generator/",
+      "final_url": "https://pixso.cn/designskills/image-to-svg-online-generator/",
+      "characters": 2807,
+      "status": "ok"
+    }
+  ]
+}

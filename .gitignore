@@ -1,9 +1,17 @@
 __pycache__/
 *.pyc
 .venv/
+.tools/
 out/batch100/
 out/browser_check_tmp/
 .pytest_cache/
 temp/*.log
+*.log
 out/
 node_modules/
+.idea/
+eval/results/
+
+# 本地模型实验的字体、配对数据与权重，来源清单及训练代码保留在 ml/。
+ml/data/
+ml/runs/

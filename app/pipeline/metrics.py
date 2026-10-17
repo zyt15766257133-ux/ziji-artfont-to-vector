@@ -578,6 +578,23 @@ def evaluate(prepared: PreparedImage, svg_text: str, elapsed_ms: float | None = 
 
     orig_mask = prepared.mask > 127
     out_mask = raster[:, :, 3] > 127
+    alpha_shape_iou = _iou(orig_mask, out_mask)
+    comparison_basis = 'foreground_alpha'
+    # On an opaque source, a faint grey painted shape and a translucent black
+    # shadow can look identical. Alpha>50% incorrectly declares the latter
+    # missing. Compare filtered artwork on the same original backdrop instead.
+    opaque_source = (prepared.source_rgba is not None
+                     and bool(np.all(prepared.source_rgba[:,:,3] >= 250)))
+    if ('<filter' in svg_text and opaque_source and prepared.bg_color is not None
+            and prepared.quality.background_uniform and prepared.rgb_raw is not None):
+        bg = np.asarray(prepared.bg_color,dtype=float)
+        alpha = raster[:,:,3:4].astype(float)/255.
+        composite = raster[:,:,:3]*alpha+bg*(1-alpha)
+        orig_mask = np.linalg.norm(prepared.rgb_raw.astype(float)-bg,axis=2)>20
+        out_mask = np.linalg.norm(composite-bg,axis=2)>20
+        raster = np.dstack([np.uint8(np.clip(np.rint(composite),0,255)),
+                            np.full(raster.shape[:2],255,np.uint8)])
+        comparison_basis = 'source_background_composite_contrast_20'
 
     est = _glyph_count(orig_mask)
     glyphs = int(glyph_count) if glyph_count else est
@@ -685,6 +702,8 @@ def evaluate(prepared: PreparedImage, svg_text: str, elapsed_ms: float | None = 
     color_dev = color_hex_dev if color_mode == "single" else presence_dev
 
     metrics = {
+        'comparison_basis': comparison_basis,
+        'alpha_shape_iou': round(alpha_shape_iou,4),
         # 轮廓还原度（主指标）
         "shape_iou": round(iou, 4),
         "shape_iou_1px": round(iou_tolerant, 4),

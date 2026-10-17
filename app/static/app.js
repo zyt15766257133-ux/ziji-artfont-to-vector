@@ -8,11 +8,13 @@ const PARAM_LABELS = {
   gradient_levels: '渐变色阶', filter_speckle: '杂点过滤', corner_angle: '角点角',
 };
 const PRESET_DEFAULTS = {
+  fidelity: {},
+  pixel_exact: {},
   quality: { tolerance: 0.25, max_nodes: 500, max_colors: 16, gradient_levels: 14, filter_speckle: 2, corner_angle: 55 },
   balanced: { tolerance: 0.5, max_nodes: 500, max_colors: 12, gradient_levels: 10, filter_speckle: 4, corner_angle: 62 },
   compact: { tolerance: 0.8, max_nodes: 500, max_colors: 8, gradient_levels: 8, filter_speckle: 8, corner_angle: 70 },
 };
-const PRESET_NAMES = { quality: '高质量', balanced: '均衡', compact: '精简' };
+const PRESET_NAMES = { fidelity: '保真曲线', pixel_exact: '原像素路径', quality: '高质量', balanced: '均衡', compact: '精简' };
 const PARAM_TIPS = {
   tolerance: {
     title: '轮廓贴合容差（像素）',
@@ -87,7 +89,7 @@ const state = {
   mode: 'single',
   phase: 'empty',          // empty | inspect | converting | result
   stale: false,            // 结果来自旧参数
-  preset: 'balanced',
+  preset: 'fidelity',
   result: null,            // 当前结果（含 svg / metrics）
   paramsUsed: null,        // 转换时的参数快照
   fmt: 'svg',
@@ -139,6 +141,11 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
 /* ------------------------------------------------------------ 参数 */
 function readParams() {
   const p = { preset: state.preset, engine: 'auto' };
+  if (['fidelity', 'pixel_exact'].includes(state.preset)) {
+    p.strict_input = !$('#strict_input').classList.contains('off');
+    if ($('#glyph_count').value) p.glyph_count = Number($('#glyph_count').value);
+    return p;
+  }
   PARAM_IDS.forEach((id) => { p[id] = Number($(`#${id}`).value); });
   p.auto_verify = !$('#auto_verify').classList.contains('off');
   p.strict_input = !$('#strict_input').classList.contains('off');
@@ -173,6 +180,8 @@ function applyPreset(key) {
   const table = PRESET_DEFAULTS[key];
   if (!table) return;
   state.preset = key;
+  const sourceMode = ['fidelity', 'pixel_exact'].includes(key);
+  [...PARAM_IDS, 'auto_verify', 'spot_colors'].forEach((id) => { $(`#${id}`).disabled = sourceMode; });
   Object.entries(table).forEach(([k, v]) => { $(`#${k}`).value = v; });
   syncOutputs();
   renderPresetSummary();
@@ -180,6 +189,10 @@ function applyPreset(key) {
 
 function renderPresetSummary() {
   const p = readParams();
+  if (['fidelity', 'pixel_exact'].includes(p.preset)) {
+    $('#preset-summary').innerHTML = '<span class="pill">保留原背景</span><span class="pill">不压缩节点</span>';
+    return;
+  }
   $('#preset-summary').innerHTML = [
     `容差 <b>${p.tolerance}px</b>`,
     `颜色层 <b>${p.max_colors}</b>`,
@@ -207,7 +220,8 @@ function restoreParams() {
   $('#glyph_count').value = state.paramsUsed.glyph_count ?? '';
   $('#spot_colors').value = state.paramsUsed.spot_colors ?? '';
   $$('#preset-group button').forEach((button) => button.classList.toggle('on', button.dataset.preset === state.preset));
-  PARAM_IDS.forEach((id) => { $(`#${id}`).value = state.paramsUsed[id]; });
+  applyPreset(state.preset);
+  PARAM_IDS.forEach((id) => { if (state.paramsUsed[id] !== undefined) $(`#${id}`).value = state.paramsUsed[id]; });
   $('#auto_verify').classList.toggle('off', !state.paramsUsed.auto_verify);
   $('#strict_input').classList.toggle('off', !state.paramsUsed.strict_input);
   syncOutputs();
@@ -250,7 +264,7 @@ function render() {
   $('#param-box').classList.toggle('locked', phase === 'converting');
   $$('.field[data-param]').forEach((el) => {
     const id = el.dataset.param;
-    el.classList.toggle('moved', !!(phase === 'result' && state.paramsUsed
+    el.classList.toggle('moved', !!(!$(`#${id}`).disabled && phase === 'result' && state.paramsUsed
       && Number($(`#${id}`).value) !== Number(state.paramsUsed[id])));
   });
   $('#restore-params').hidden = !(single && phase === 'result' && stale);
@@ -291,12 +305,17 @@ function renderVerdict() {
   } else if (phase === 'result' && stale) {
     tone = 'warn'; ico = '!';
     title = '参数已改动，重新转换后生效';
-    body = `下面的结果来自上一次参数（容差 ${state.paramsUsed?.tolerance}px）。重新转换后会自动替换，这次结果保留在「最近转换」里。`;
+    const previous = state.paramsUsed?.tolerance == null ? (PRESET_NAMES[state.paramsUsed?.preset] || '自定义') : `容差 ${state.paramsUsed.tolerance}px`;
+    body = `下面的结果来自上一次参数（${previous}）。重新转换后会自动替换，这次结果保留在「最近转换」里。`;
     ms = `上次 ${Math.round(result?.elapsed_ms || 0)} ms`;
   } else if (phase === 'result') {
     const m = result?.metrics || {};
     const fails = resultFailures(m);
-    if (m.input_invalid) {
+    if (m.source_fidelity) {
+      tone = 'warn'; ico = '!';
+      title = result.stats?.representation === 'pixel_grid' ? '原像素路径：放大保留像素网格' : '保真曲线：仍为近似结果';
+      body = `原图回渲主体平均误差 ${num(m.source_fidelity.active_mae, 3)}/255，最大误差 ${num(m.source_fidelity.max_error, 2)}/255。${(result.warnings || [])[0] || ''}`;
+    } else if (m.input_invalid) {
       tone = 'bad'; ico = '!';
       title = '建议更换素材';
       body = `素材判定异常（${(m.input_invalid_reasons || []).length} 项），继续调整参数收益有限。`;
@@ -408,6 +427,16 @@ function renderMetrics(data) {
     { k: '输出引擎', v: m.engine === 'vtracer' ? 'vtracer' : '轮廓引擎', ok: true, n: m.engine === 'vtracer' ? '第三方兜底命中' : '自研引擎', e: '本次实际使用的矢量化引擎，由「第三方引擎兜底」开关控制 vtracer 是否参与对比取优' },
     { k: '素材判定', v: m.input_invalid ? '异常' : q.severity === 'warning' ? '提醒' : '合格', ok: !m.input_invalid, n: `主体 ${pct(q.orig_bbox_ratio ?? q.subject_bbox_ratio)}`, e: '背景、模糊、过曝、主体占比等输入质量判定' },
   ];
+  if (m.source_fidelity) {
+    const f = m.source_fidelity;
+    chips.splice(0, chips.length,
+      { k: '主体平均误差', v: `${num(f.active_mae, 3)}/255`, n: '原图逐像素对照', e: '直接对原始 RGBA 在黑底、白底合成，取较大的误差；不使用处理后的掩膜替代原图' },
+      { k: '最大误差', v: `${num(f.max_error, 2)}/255`, n: '单通道最差像素', e: '全图最差像素误差，不能用全图均值掩盖局部细节损失' },
+      { k: '明显差异像素', v: f.pixels_over_8, n: '误差 >8/255', e: '任一通道在黑白背景上合成误差大于 8 的像素数量' },
+      { k: 'SVG 锚点', v: m.node_total, n: '未压缩节点', e: '为保留细节，本档不执行单字 500 节点限制' },
+      { k: '表示方式', v: data.stats?.representation === 'pixel_grid' ? '像素网格' : '近似曲线', n: '保留原画布和背景', e: '像素路径不是平滑字形重建；曲线结果仍需放大检查' },
+      { k: '转换耗时', v: `${Math.round(data.elapsed_ms)} ms`, n: '含回渲复核', e: '完整服务耗时，不承诺 5 秒内完成' });
+  }
   $('#metric-strip').innerHTML = chips.map((ch) => `
     <button class="m ${ch.ok === false ? 'warn' : ch.ok ? '' : ''}" type="button">
       <div class="k">${ch.k}</div>
@@ -566,6 +595,12 @@ function updateLoader(stage, elapsedMs) {
   $('#loader-elapsed').textContent = `${((elapsedMs || 0) / 1000).toFixed(1)}s`;
   if (state.phase === 'converting') {
     $('#verdict-body').textContent = STAGE_TEXT[stage] || '';
+    if (['fidelity', 'pixel_exact'].includes(state.preset)) {
+      $('#verdict-body').textContent = ({preprocess:'读取原图', vectorize:'保留原图细节并生成路径', verify:'与原图逐像素比较'})[stage] || '';
+      $$('#loader-steps .step').forEach((el, i) => {
+        el.textContent = ['1 读取原图','2 生成保真路径','3 对照原图检查'][i];
+      });
+    }
     $('#verdict-ms').textContent = `已用 ${((elapsedMs || 0) / 1000).toFixed(1)}s`;
   }
 }
@@ -665,7 +700,7 @@ function pushHistory(data) {
   const item = {
     filename: data.filename, stem: data.stem, time: Date.now(),
     params: { ...(state.paramsUsed || readParams()) }, fmt: state.fmt, elapsed_ms: data.elapsed_ms,
-    metrics: data.metrics, quality: data.quality, size: data.size,
+    metrics: data.metrics, quality: data.quality, size: data.size, stats: data.stats,
     svg: data.svg, warnings: data.warnings || [],
   };
   state.history.unshift(item);
@@ -676,6 +711,7 @@ function pushHistory(data) {
 
 function verdictShort(item) {
   if (!item.metrics) return { text: '—', bad: true };
+  if (item.metrics.source_fidelity) return { text: `误差 ${num(item.metrics.source_fidelity.active_mae, 3)}/255`, bad: false };
   const fails = resultFailures(item.metrics);
   if (item.metrics.input_invalid) return { text: '建议换素材', bad: true };
   if (!fails.length) return { text: pct(item.metrics.contour_fidelity), bad: false };
@@ -689,7 +725,7 @@ function renderHistory() {
     const v = verdictShort(it);
     return `<button class="hist ${state.result && it.stem === state.result.stem && !state.stale && i === 0 ? 'on' : ''}" data-i="${i}">
       <img src="${svgDataUrl(it.svg)}" alt="">
-      <div><b>${escapeHtml(it.filename)}</b><span>${new Date(it.time).toLocaleString('zh-CN', { hour12: false })} · ${PRESET_NAMES[it.params?.preset] || '自定义'}档 · ${it.params?.tolerance}px</span></div>
+      <div><b>${escapeHtml(it.filename)}</b><span>${new Date(it.time).toLocaleString('zh-CN', { hour12: false })} · ${PRESET_NAMES[it.params?.preset] || '自定义'}档${it.params?.tolerance == null ? '' : ` · ${it.params.tolerance}px`}</span></div>
       <div class="v"><b class="${v.bad ? 'bad' : ''}">${v.text}</b><span>${it.fmt.toUpperCase()}</span></div>
     </button>`;
   }).join('') || '<p class="empty-row">还没有转换记录</p>';
@@ -701,7 +737,7 @@ function openHistory(i) {
   if (!it) return;
   state.result = {
     filename: it.filename, stem: it.stem, svg: it.svg, metrics: it.metrics,
-    quality: it.quality, size: it.size, elapsed_ms: it.elapsed_ms, warnings: it.warnings,
+    quality: it.quality, size: it.size, elapsed_ms: it.elapsed_ms, warnings: it.warnings, stats: it.stats,
   };
   state.paramsUsed = it.params;
   PARAM_IDS.forEach((id) => { if (it.params?.[id] !== undefined) $(`#${id}`).value = it.params[id]; });
@@ -744,6 +780,7 @@ function addToQueue(files) {
 function queueVerdict(item) {
   if (item.status === 'bad') return { text: item.error || '失败', cls: 'bad' };
   if (!item.metrics) return { text: '待转换', cls: 'idle' };
+  if (item.metrics.source_fidelity) return { text: '原图误差已测，效果待确认', cls: 'warn' };
   const fails = resultFailures(item.metrics);
   if (item.metrics.input_invalid) return { text: '建议换素材', cls: 'bad' };
   if (!fails.length) return { text: '效果待确认', cls: 'warn' };
@@ -774,8 +811,8 @@ function renderQueue() {
     return `<tr class="${item.status === 'bad' ? 'bad' : ''}">
       <td title="${escapeHtml(item.file.name)}">${i + 1}. ${escapeHtml(item.file.name)}</td>
       <td><span class="badge ${v.cls}">${escapeHtml(v.text)}</span></td>
-      <td class="num">${m ? pct(m.contour_fidelity) : '—'}</td>
-      <td class="num">${m ? num(m.node_per_glyph) : '—'}</td>
+      <td class="num">${m?.source_fidelity ? `误差 ${num(m.source_fidelity.active_mae, 3)}/255` : m ? pct(m.contour_fidelity) : '—'}</td>
+      <td class="num">${m?.node_per_glyph == null ? '—' : num(m.node_per_glyph)}</td>
       <td class="num">${item.elapsed_ms ? `${Math.round(item.elapsed_ms)} ms` : '—'}</td>
       <td>${badge}</td>
       <td>${act}</td>
@@ -1345,11 +1382,12 @@ async function init() {
 
   const cfg = await fetch('/api/presets').then((r) => r.json());
   $('#preset-group').innerHTML = cfg.presets.map((p, i) => `
-    <button class="${i === 1 ? 'on' : ''}" data-preset="${p.key}" data-desc="${p.desc}">${p.name}</button>`).join('');
-  $('#preset-hint').textContent = cfg.presets[1].desc;
+    <button class="${p.key === state.preset ? 'on' : ''}" data-preset="${p.key}" data-desc="${p.desc}">${p.name}</button>`).join('');
+  $('#preset-hint').textContent = cfg.presets.find((p) => p.key === state.preset).desc;
 
   const d = cfg.defaults;
   PARAM_IDS.forEach((id) => { if (d[id] !== undefined) $(`#${id}`).value = d[id]; });
+  applyPreset(state.preset);
   syncOutputs();
   renderPresetSummary();
   loadHistory();

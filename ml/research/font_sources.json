@@ -1,0 +1,154 @@
+[
+  {
+    "family": "zcoolxiaowei",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolxiaowei/OFL.txt",
+        "bytes": 4400,
+        "sha256": "a094514ca57cf8f9c5e8d8d1adab5d8cd3a377297ff016f9df2c05b3ecd77f0a"
+      },
+      {
+        "name": "ZCOOLXiaoWei-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+        "bytes": 6313808,
+        "sha256": "a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1"
+      }
+    ]
+  },
+  {
+    "family": "zcoolkuaile",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolkuaile/OFL.txt",
+        "bytes": 4398,
+        "sha256": "538078469839b4a2e7ad22bef4ebe41681a4e53749bb2a072144024f1d6d703d"
+      },
+      {
+        "name": "ZCOOLKuaiLe-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf",
+        "bytes": 1514968,
+        "sha256": "812a6fc1fe54b6d73a419245c32dfeba8aa33104d5be90d1cf6af082007cb71d"
+      }
+    ]
+  },
+  {
+    "family": "zcoolqingkehuangyou",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolqingkehuangyou/OFL.txt",
+        "bytes": 4419,
+        "sha256": "f1bce31b817dee01c1e4ef8bc45d8ecb95f01f4abbf0a985007cb3cd0fd8123d"
+      },
+      {
+        "name": "ZCOOLQingKeHuangYou-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolqingkehuangyou/ZCOOLQingKeHuangYou-Regular.ttf",
+        "bytes": 8328684,
+        "sha256": "54f0c0df4308cd74cd0f2fd3494ae054dbc4a1fd6fa7d71f4807eb4cdd8b4136"
+      }
+    ]
+  },
+  {
+    "family": "longcang",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "LongCang-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/longcang/LongCang-Regular.ttf",
+        "bytes": 5162508,
+        "sha256": "e5bf2c3f24ef2327c6f136d8f73e2f9dfdf44896fdbeb35a9515f44777bb91bc"
+      },
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/longcang/OFL.txt",
+        "bytes": 4390,
+        "sha256": "603546b7219a94bb59bf8294458194a5010119486354092b66a09a3fd61aeacc"
+      }
+    ]
+  },
+  {
+    "family": "mashanzheng",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "MaShanZheng-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/mashanzheng/MaShanZheng-Regular.ttf",
+        "bytes": 5857936,
+        "sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb"
+      },
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/mashanzheng/OFL.txt",
+        "bytes": 4397,
+        "sha256": "d7bdb1cee215b689e23c2f95672a6084c790542170648267a55114103d756a08"
+      }
+    ]
+  },
+  {
+    "family": "zhimangxing",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zhimangxing/OFL.txt",
+        "bytes": 4397,
+        "sha256": "10947328199e369a3e6b4a67e8e5507ed99d5bbb264a1f156415aa9b665e4d15"
+      },
+      {
+        "name": "ZhiMangXing-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zhimangxing/ZhiMangXing-Regular.ttf",
+        "bytes": 4063532,
+        "sha256": "644e0cae9b40f0b10ab729a01bd32032e3973bac22be3dccae01bf6ae7fde969"
+      }
+    ]
+  },
+  {
+    "family": "liujianmaocao",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "LiuJianMaoCao-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/liujianmaocao/LiuJianMaoCao-Regular.ttf",
+        "bytes": 4951804,
+        "sha256": "cab396b91a5b7c0b4005a35891180d06e6751f5ac261fe680aec65c1ae209033"
+      },
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/liujianmaocao/OFL.txt",
+        "bytes": 4406,
+        "sha256": "ff56684b0212481e7c3886c26d5a655de9b211c8119e5ccc756138a97b066acc"
+      }
+    ]
+  },
+  {
+    "family": "notosanssc",
+    "license": "SIL Open Font License 1.1",
+    "commit": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+    "files": [
+      {
+        "name": "NotoSansSC[wght].ttf",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
+        "bytes": 17772300,
+        "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da"
+      },
+      {
+        "name": "OFL.txt",
+        "url": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/notosanssc/OFL.txt",
+        "bytes": 4388,
+        "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+      }
+    ]
+  }
+]

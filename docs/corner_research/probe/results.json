@@ -1,0 +1,194 @@
+{
+  "scope": "Isolated fitters on controlled synthetic polygons; not complete API or commercial-product benchmark. Reference is exact geometry rendered at 4x. Corner ROI radius=8 source pixels.",
+  "source_size": [
+    224,
+    176
+  ],
+  "render_scale": 4,
+  "rows": [
+    {
+      "case": "rectangle",
+      "diagnostic": "all_simplified_vertices_marked_as_corners",
+      "value": true,
+      "vertices": 4
+    },
+    {
+      "case": "rectangle",
+      "method": "Contour 200",
+      "global_iou": 0.88125,
+      "corner_roi_iou": 0.57105,
+      "segments_or_reported_nodes": 4,
+      "fit_ms_excluding_render": 0.61
+    },
+    {
+      "case": "rectangle",
+      "method": "Contour 12",
+      "global_iou": 0.88125,
+      "corner_roi_iou": 0.57105,
+      "segments_or_reported_nodes": 4,
+      "fit_ms_excluding_render": 0.22
+    },
+    {
+      "case": "rectangle",
+      "method": "No smoothing",
+      "global_iou": 0.98387,
+      "corner_roi_iou": 0.84793,
+      "segments_or_reported_nodes": 3,
+      "fit_ms_excluding_render": 0.12
+    },
+    {
+      "case": "rectangle",
+      "method": "Direct .55",
+      "global_iou": 0.99759,
+      "corner_roi_iou": 0.97912,
+      "segments_or_reported_nodes": 5,
+      "fit_ms_excluding_render": 0.93
+    },
+    {
+      "case": "rectangle",
+      "method": "VTracer 60",
+      "global_iou": 1.0,
+      "corner_roi_iou": 1.0,
+      "segments_or_reported_nodes": null,
+      "fit_ms_excluding_render": 1.14
+    },
+    {
+      "case": "concave_L",
+      "diagnostic": "all_simplified_vertices_marked_as_corners",
+      "value": false,
+      "vertices": 7
+    },
+    {
+      "case": "concave_L",
+      "method": "Contour 200",
+      "global_iou": 0.96915,
+      "corner_roi_iou": 0.87317,
+      "segments_or_reported_nodes": 7,
+      "fit_ms_excluding_render": 0.48
+    },
+    {
+      "case": "concave_L",
+      "method": "Contour 12",
+      "global_iou": 0.96915,
+      "corner_roi_iou": 0.87317,
+      "segments_or_reported_nodes": 7,
+      "fit_ms_excluding_render": 0.24
+    },
+    {
+      "case": "concave_L",
+      "method": "No smoothing",
+      "global_iou": 0.97552,
+      "corner_roi_iou": 0.88626,
+      "segments_or_reported_nodes": 6,
+      "fit_ms_excluding_render": 0.15
+    },
+    {
+      "case": "concave_L",
+      "method": "Direct .55",
+      "global_iou": 0.99629,
+      "corner_roi_iou": 0.97579,
+      "segments_or_reported_nodes": 7,
+      "fit_ms_excluding_render": 1.37
+    },
+    {
+      "case": "concave_L",
+      "method": "VTracer 60",
+      "global_iou": 1.0,
+      "corner_roi_iou": 1.0,
+      "segments_or_reported_nodes": null,
+      "fit_ms_excluding_render": 1.02
+    },
+    {
+      "case": "acute_tip",
+      "diagnostic": "all_simplified_vertices_marked_as_corners",
+      "value": false,
+      "vertices": 97
+    },
+    {
+      "case": "acute_tip",
+      "method": "Contour 200",
+      "global_iou": 0.96229,
+      "corner_roi_iou": 0.84224,
+      "segments_or_reported_nodes": 97,
+      "fit_ms_excluding_render": 1.4
+    },
+    {
+      "case": "acute_tip",
+      "method": "Contour 12",
+      "global_iou": 0.95635,
+      "corner_roi_iou": 0.81849,
+      "segments_or_reported_nodes": 10,
+      "fit_ms_excluding_render": 1.16
+    },
+    {
+      "case": "acute_tip",
+      "method": "No smoothing",
+      "global_iou": 0.96323,
+      "corner_roi_iou": 0.84699,
+      "segments_or_reported_nodes": 96,
+      "fit_ms_excluding_render": 0.83
+    },
+    {
+      "case": "acute_tip",
+      "method": "Direct .55",
+      "global_iou": 0.9847,
+      "corner_roi_iou": 0.94288,
+      "segments_or_reported_nodes": 274,
+      "fit_ms_excluding_render": 22.87
+    },
+    {
+      "case": "acute_tip",
+      "method": "VTracer 60",
+      "global_iou": 0.97197,
+      "corner_roi_iou": 0.90313,
+      "segments_or_reported_nodes": null,
+      "fit_ms_excluding_render": 1.04
+    },
+    {
+      "case": "small_notch",
+      "diagnostic": "all_simplified_vertices_marked_as_corners",
+      "value": false,
+      "vertices": 10
+    },
+    {
+      "case": "small_notch",
+      "method": "Contour 200",
+      "global_iou": 0.98407,
+      "corner_roi_iou": 0.91628,
+      "segments_or_reported_nodes": 10,
+      "fit_ms_excluding_render": 0.59
+    },
+    {
+      "case": "small_notch",
+      "method": "Contour 12",
+      "global_iou": 0.98407,
+      "corner_roi_iou": 0.91628,
+      "segments_or_reported_nodes": 10,
+      "fit_ms_excluding_render": 0.32
+    },
+    {
+      "case": "small_notch",
+      "method": "No smoothing",
+      "global_iou": 0.98413,
+      "corner_roi_iou": 0.91837,
+      "segments_or_reported_nodes": 9,
+      "fit_ms_excluding_render": 0.2
+    },
+    {
+      "case": "small_notch",
+      "method": "Direct .55",
+      "global_iou": 0.99758,
+      "corner_roi_iou": 0.97776,
+      "segments_or_reported_nodes": 9,
+      "fit_ms_excluding_render": 1.41
+    },
+    {
+      "case": "small_notch",
+      "method": "VTracer 60",
+      "global_iou": 1.0,
+      "corner_roi_iou": 1.0,
+      "segments_or_reported_nodes": null,
+      "fit_ms_excluding_render": 1.08
+    }
+  ]
+}

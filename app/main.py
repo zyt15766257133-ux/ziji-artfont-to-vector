@@ -51,6 +51,9 @@ if EVIDENCE is not None and EVIDENCE.is_dir():
     app.mount('/evidence', StaticFiles(directory=str(EVIDENCE)), name='evidence')
 if SAMPLES.exists():
     app.mount("/samples", StaticFiles(directory=str(SAMPLES)), name="samples")
+FIDELITY_RESULTS = ROOT / 'eval' / 'results' / 'full_folder_fidelity'
+if FIDELITY_RESULTS.is_dir():
+    app.mount('/fidelity-results', StaticFiles(directory=str(FIDELITY_RESULTS)), name='fidelity-results')
 
 # 内置样本转换结果缓存：同一参数重复点示例时直接命中，避免每次等几秒
 _SAMPLE_CACHE: "OrderedDict[str, dict]" = OrderedDict()
@@ -179,6 +182,10 @@ def presets() -> dict:
     p = VectorizeOptions.PRESETS
     return {
         "presets": [
+            {"key": "fidelity", "name": "保真曲线",
+             "desc": "保留细节和原背景，不压缩节点；曲线仍为近似，需检查放大细节"},
+            {"key": "pixel_exact", "name": "原像素路径",
+             "desc": "用矢量矩形保存原像素；文件可能很大，放大仍保留像素网格"},
             {"key": "quality", "name": "高质量",
              "desc": f"容差 {p['quality']['tolerance']}px，颜色层 {p['quality']['max_colors']}，节点更多、轮廓更准"},
             {"key": "balanced", "name": "均衡", "desc": "默认档，兼顾还原度与节点精简"},

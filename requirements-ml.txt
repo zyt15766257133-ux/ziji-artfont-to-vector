@@ -1,0 +1,7 @@
+# 先按 README 安装项目依赖；CPU torch 使用下面的官方索引命令单独安装。
+# python -m pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+fonttools==4.67.0
+pytest==9.1.1
+httpx==0.28.1
+matplotlib==3.11.2

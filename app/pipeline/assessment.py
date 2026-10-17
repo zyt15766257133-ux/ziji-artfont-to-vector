@@ -25,8 +25,10 @@ def assess_result(metrics: dict, quality: dict, elapsed_ms: float | None,
            ratio >= .60 if numeric(ratio) else None,
            note='当前按提取掩膜外接矩形计算，独立标注及正式占比定义待核定。')
     raw = metrics.get('shape_iou')
-    record('contour_raw', '对预处理掩膜的原始 IoU ≥90%', raw,
-           raw >= .90 if numeric(raw) else None, note='诊断指标；视觉验收另列。')
+    composite_basis = metrics.get('comparison_basis') == 'source_background_composite_contrast_20'
+    record('contour_raw', '对原背景合成可见区域的 IoU ≥90%' if composite_basis else '对预处理掩膜的原始 IoU ≥90%', raw,
+           raw >= .90 if numeric(raw) else None,
+           note='在原背景合成后对双方使用相同的 RGB 色距 >20；原 alpha IoU 单独保留。' if composite_basis else '诊断指标；视觉验收另列。')
     truth = metrics.get('truth_shape_iou')
     record('contour_truth', '对独立真值的 IoU ≥90%', truth,
            truth >= .90 if numeric(truth) else None,

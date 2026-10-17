@@ -45,6 +45,8 @@ class VectorizeOptions:
     snap_deg: float = 0.0           # 解析后的吸附角容差（度，0=关），resolve_profile 写入
 
     PRESETS = {
+        "fidelity": {"filter_speckle": 0, "enforce_node_budget": False},
+        "pixel_exact": {"filter_speckle": 0, "enforce_node_budget": False},
         "quality":  {"tolerance": 0.25, "max_colors": 16, "gradient_levels": 14,
                      "color_precision": 7, "filter_speckle": 2, "corner_angle": 55.0},
         "balanced": {"tolerance": 0.5, "max_colors": 12, "gradient_levels": 10,
@@ -1562,6 +1564,9 @@ def vectorize(prepared: PreparedImage, opts: VectorizeOptions) -> tuple[SvgDocum
     if engine == 'contour':
         from .direct import monochrome_document
         direct = monochrome_document(prepared, opts)
+        if direct is None:
+            from .shadow_model import shadow_document
+            direct = shadow_document(prepared, opts)
         if direct:
             doc, stats = direct
         else:
@@ -1573,19 +1578,22 @@ def vectorize(prepared: PreparedImage, opts: VectorizeOptions) -> tuple[SvgDocum
             if compact:
                 candidate,candidate_stats = compact
                 diagnostic = compare_candidate(prepared,opts,doc,stats,candidate,candidate_stats)
-                if not diagnostic['rejected']:
-                    from .candidate_guard import independent_raster
-                    from .texture import texture_agreement
-                    texture = texture_agreement(prepared,independent_raster(candidate))
-                    diagnostic['texture'] = texture
-                    if not texture['passed']:
-                        diagnostic['rejected'].append('local_brush_texture')
+                # Record texture even when a shape/colour gate already rejected
+                # the candidate. resvg supports long gradients that MuPDF cannot
+                # render; the independent PDF geometry gate remains mandatory.
+                from .native_render import render_svg
+                from .texture import texture_agreement
+                texture = texture_agreement(prepared, render_svg(candidate.to_svg()))
+                texture['renderer'] = 'resvg'
+                diagnostic['texture'] = texture
+                if not texture['passed']:
+                    diagnostic['rejected'].append('local_brush_texture')
                 if not diagnostic['rejected']:
                     candidate_stats['brush_comparison'] = diagnostic
                     doc,stats = candidate,candidate_stats
                 else:
                     stats['brush_comparison'] = diagnostic
-        if doc.layers and opts.refine_source_edges and not stats.get('brush_candidate') and not stats.get('source_silhouette'):
+        if doc.layers and opts.refine_source_edges and not stats.get('brush_candidate') and not stats.get('source_silhouette') and not stats.get('source_shadow_model'):
             from .source_edges import select_source_edges
             doc, stats = select_source_edges(prepared, opts, doc, stats)
             from .source_tones import select_source_tones
@@ -1593,7 +1601,7 @@ def vectorize(prepared: PreparedImage, opts: VectorizeOptions) -> tuple[SvgDocum
         if not doc.layers:  # 颜色过于复杂时自动切 vtracer
             doc, stats = vectorize_vtracer(prepared, opts)
             stats["fallback_from"] = "contour"
-        elif opts.engine == "auto" and opts.auto_verify and not (stats.get('source_tones_selected') or stats.get('source_silhouette')):
+        elif opts.engine == "auto" and opts.auto_verify and not (stats.get('source_tones_selected') or stats.get('source_silhouette') or stats.get('source_shadow_model')):
             score = quick_shape_iou(prepared, doc.to_svg())
             stats["self_check_iou"] = round(score, 4)
             if score < 0.93:
@@ -1662,6 +1670,13 @@ def vectorize_bytes(data: bytes, opts: VectorizeOptions | None = None,
     img = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
     if img is None:
         raise ValueError("无法解码图片，请确认是 PNG/JPG/WEBP 格式")
+
+    if opts.mode in {'fidelity', 'pixel_exact'}:
+        from .service import convert_bytes
+        result = convert_bytes('image.png', data, opts, with_preview=False, strict_input=False)
+        if result.error:
+            raise ValueError(result.error)
+        return {'svg': result.svg, 'stats': result.stats, 'quality': result.quality, 'size': result.size}
 
     p_opts = {"remove_background": True, "denoise": True, "enhance": True, "deskew": True}
     if preprocess_options:

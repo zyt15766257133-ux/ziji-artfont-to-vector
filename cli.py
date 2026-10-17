@@ -86,6 +86,12 @@ def cmd_convert(args) -> int:
     info = write_outputs(res, Path(args.out), args.format, not args.no_preview)
     m = res.metrics
     print(f"[{info['stem']}] 引擎 {m.get('engine')} 图层次数 {m.get('layer_count')} 耗时 {m['elapsed_ms']:.0f}ms")
+    if m.get('source_fidelity'):
+        f = m['source_fidelity']
+        print(f"  原图主体平均误差 {f['active_mae']:.4f}/255，最大误差 {f['max_error']:.4f}/255")
+        print('  表示方式：' + res.stats['representation'] + '；不承诺恢复任意放大无失真的平滑字形')
+        print('  产出：' + ', '.join(info['files']))
+        return 0
     print(f"  轮廓还原度 {m['contour_fidelity'] * 100:.1f}%  特征保留 {m['feature_retention'] * 100:.1f}%  "
           f"单字节点 {m['node_per_glyph']:.0f}  色偏 {m['color_deviation'] * 100:.1f}%")
     print("  判定：" + ("全部达标" if m["checks"]["passed"] else
@@ -120,8 +126,9 @@ def cmd_batch(args) -> int:
         ok += 1
         m = res.metrics
         rows.append({"file": path.name, "elapsed_ms": round(res.elapsed_ms, 1),
-                     "fidelity": m["contour_fidelity"], "feature": m["feature_retention"],
-                     "node_per_glyph": m["node_per_glyph"], "color_deviation": m["color_deviation"],
+                     "fidelity": m.get("contour_fidelity"), "feature": m.get("feature_retention"),
+                     "source_fidelity": m.get("source_fidelity"),
+                     "node_per_glyph": m.get("node_per_glyph"), "color_deviation": m.get("color_deviation"),
                      "passed": m["checks"]["passed"]})
     total = (time.perf_counter() - t0) * 1000
     print(f"批量完成 {ok}/{len(files)}，总耗时 {total / 1000:.1f}s，平均 {total / max(1, ok):.0f}ms/张")
@@ -184,7 +191,7 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--preset", default="balanced", choices=["quality", "balanced", "compact"])
+    common.add_argument("--preset", default="balanced", choices=list(VectorizeOptions.PRESETS))
     common.add_argument("--engine", default="auto", choices=["auto", "contour", "vtracer"])
     common.add_argument("--tolerance", type=float, default=None)
     common.add_argument("--max-nodes", type=int, default=None)

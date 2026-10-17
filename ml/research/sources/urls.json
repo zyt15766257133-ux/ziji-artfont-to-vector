@@ -1,0 +1,10 @@
+{
+  "deepvecfont": "https://raw.githubusercontent.com/yizhiwang96/deepvecfont/master/README.md",
+  "deepvecfont-v2": "https://raw.githubusercontent.com/yizhiwang96/DeepVecFont-v2/main/README.md",
+  "starvector": "https://raw.githubusercontent.com/joanrod/star-vector/main/README.md",
+  "svg-fonts": "https://huggingface.co/datasets/starvector/svg-fonts/raw/main/README.md",
+  "live": "https://raw.githubusercontent.com/Picsart-AI-Research/LIVE-Layerwise-Image-Vectorization/master/README.md",
+  "diffvg": "https://raw.githubusercontent.com/BachiLi/diffvg/master/README.md",
+  "vtracer": "https://raw.githubusercontent.com/visioncortex/vtracer/master/README.md",
+  "make-me-a-hanzi": "https://raw.githubusercontent.com/skishore/makemeahanzi/master/README.md"
+}

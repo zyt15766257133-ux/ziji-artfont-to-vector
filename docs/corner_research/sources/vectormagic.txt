@@ -1,0 +1,271 @@
+Vector Magic: Convert JPG, PNG images to SVG, EPS, AI vectors
+Raster to vector, magically
+Turn your images into clean vector art
+like magic.
+Vector Magic automatically converts JPG, PNG, GIF bitmaps to PDF, SVG, EPS vectors. Quickly get your artwork ready to print, embroider, cut, and more with the world's best full-color auto-tracer!
+Vectorize Image
+Drag & drop an image here
+or paste one with Ctrl + V
+JPG, PNG, BMP, and GIF images up to 1 megapixel
+OriginalPNG
+Vector MagicSVG
+Drop your image to upload
+Stunning results for any kind of image
+Each pair below is a published example: the original pixels on the left, the vector result on the right, zoomed in so you can see the edges.
+Explore more examples
+Original
+Vector
+Logos
+Cogs
+Original
+Vector
+Illustrations
+Lady
+Original
+Vector
+Photos
+Albert Memorial
+How to convert JPG, PNG, GIF images to PDF, SVG, EPS vectors
+1. UploadUpload a raster image and we automatically figure out what settings to use and trace the image for you.
+2. Review & editYou can review the vector result, tweak the settings and even edit the result, all within the same tool.
+3. Download
+The result is delivered in SVG, EPS, and PDF formats.
+The desktop edition also produces AI and DXF.
+Simply the best auto-tracer in the world
+Sub-pixel precision
+Vector Magic carefully traces out every bit of information available in your image, slicing each edge pixel at precisely the right spot to re-create the intention of your original.
+The right number of nodes
+Vector Magic is a breath of fresh air, intelligently selecting the right number of nodes to use, and placing them at excellent locations.
+Tracing
+Embedding
+Tracing not embedding
+Vector Magic always traces your bitmap, carefully teasing out the underlying shapes in it, and provides you with a real vector image with all of its benefits.
+Fully automatic vectorization
+Vector Magic analyzes your image and automatically detects appropriate settings to vectorize it with, and then goes ahead and traces out the underlying shapes in full color. This makes getting started a real breeze: just upload your image and presto, a result to review!
+Read the full tutorial
+Edit the result
+You can eliminate unwanted shapes, connect shapes that have been separated, fix broken lines, and separate shapes that should not be touching, all in the form of an easy-to-use pixel-style editor.
+Watch a video showing how to edit the result
+Bitmap images vs vector images
+What's the difference between JPG, PNG, GIF images and SVG, EPS, PDF, AI, DXF files?
+Vector images consist of shapes like circles, rectangles, lines and curves, while bitmap images, also known as raster images, consist of a grid of pixels. Vectorization or tracing is the process of taking a bitmap image and re-drawing it as a vector image.
+The shapes in vector images allow computers to do things that cannot be done with raster images, like scale them to any size without loss of quality and using them to e.g. cut, sew, paint, and laser engrave.
+Learn more about vector images
+Original800%
+Vector Magic800%
+PNG to SVG
+Turn PNG logos, icons and graphics into SVG vectors that stay crisp at any size.
+Flat colors and sharp edges trace into clean shapes with few nodes.
+The colors are picked automatically, and you can reduce them or choose an exact palette.
+Transparency is preserved in SVG and PDF output.
+Read the artwork and logos tutorial
+JPG to SVG
+Turn JPG photos, scans and artwork into SVG vectors, free of compression noise.
+Vector Magic traces the shapes beneath the JPG artifacts, so edges come out clean.
+A lower detail level rejects more noise; a higher one keeps finer detail.
+Photos become shape-based artwork with as many or as few colors as you choose.
+Read the photos tutorial
+Great for
+LogosYour logo represents your brand and is used across a wide range of media: your website, business cards, flyers, banners, etc. Ensure a consistent and crisp display in all contexts by having it in vector format.
+Pre-printNeed to get artwork ready to print, cut, or embroider? Vector Magic can help you tame your image flow. Speed up turnaround times, minimize pre-print hassles, and lower your costs!
+Graphic designQuickly get bitmap source material into your vector compositions, opening up a range of creative possibilities. Or go old-school and draw something on paper, then scan, vectorize, and refine your creation.
+... and moreCreate an artistic effect from your photos, vectorize graphs or maps, turn scanned artwork into something more flexible, and much more. Try it out today!
+I can't begin to tell you guys how much I love your product! It works SO well! My first week on the job I was able to really impress my boss with this tool! I use it often, at home and at the workplace. Thanks & good work!
+J. Hasty, Ketchikan SIGN PRO
+This program is amazing, I love it!
+R. Horn, Owner, Oddball T-shirts
+What a great program!
+S. Way, Art Teacher
+It is revolutionary!
+J. Holland
+Become a vectorization expert
+How To Use Vector Magic
+Vectorize Artwork / Logos
+Trace Photos
+Tips and Tricks
+Vectorize Scans
+Create a New Font
+Vector Magic can convert JPG, PNG, BMP, GIF images to any of EPS, SVG, PDF, AI, or DXF
+JPGPNGBMPGIF
+SVGEPSPDFAIDXF
+AI and DXF require the Desktop Edition
+Help is only a click away
+Which images can I upload?
+Officially supported input file formats are: JPG, PNG, BMP, and GIF bitmap images using the sRGB color space. That said, we do our best to accept any image format your browser can read. CMYK input gets converted to sRGB.
+How large can an image be?
+The maximum allowed image size is 1 megapixel, regardless of aspect ratio. Images larger than the size limit will be shrunk to that size. Note that this is pixels, not bytes, and there is currently no image byte size limitation.
+Which browsers are supported?
+Officially supported browsers are the latest versions of Chrome, Firefox, and Microsoft Edge running on modern desktops and laptops, though other modern browsers may also work.
+Frequently Asked QuestionsUnderstanding Vector ImagesCompatibilityFile FormatsUseful ToolsUses For Vector Images
+Contact Support
+Ready to vectorize your own images?
+See pricing
+Desktop Edition
+Need to remove the background from images, e.g. for your web shop?
+Try Clipping Magic »
+Vector Magic
+Transparency FlattenedThis image was processed with an earlier version of the Online Edition, which flattened transparency on a white background.Upload your original image again to preserve its transparency.
+Image ResizedYour image was very large, so it has been shrunk to a reasonable size.
+You can configure Pre-Crop in the Settings dialog.
+The Desktop Edition supports higher resolution images.
+Don't Over-Edit
+While the online editor is a very powerful tool, don't overdo it. If you need to do massive edits, it's probably better to work in a vector editor.
+You can do a maximum of 1,000 edits. Further edits will be lost.
+Loading...
+Uploading image
+Analyzing image
+Vectorizing image
+Enable Fully Automatic mode
+What type of image is this?
+Photograph
+Was captured using a camera.
+Recommended
+Artwork with blended edges
+Artwork
+Is anti-aliased.
+Color changes smoothly across edges.
+Was created on a computer
+Select this for drawings and scans.
+Recommended
+Artwork with non-blended edges
+Is not anti-aliased.
+Color changes abruptly across edges.
+Recommended
+Match this to the choice above
+Hover / tap on your image to see if there's blending.
+Look at the fine detail of your image. When zoomed out all edges look sharp.
+Recommended
+What level of detail would you like to see in the result?
+High
+High fidelity.
+High complexity (larger file size, harder to edit).
+Recommended
+Medium
+Medium fidelity.
+Medium complexity.
+This is usually the best option.
+Recommended
+Low
+Low fidelity.
+Low complexity (smaller file size, easier to edit).
+Makes the photo look like a drawing or a cartoon.
+Recommended
+What is the quality level (not resolution) of your image?
+High
+Color is constant within the different regions.
+Sharp and not degraded.
+Recovers details, sensitive to noise.
+Recommended
+Medium
+Color is fairly constant within the different regions.
+Somewhat degraded.
+Recommended
+Low
+Color varies a lot within the different regions.
+Blurry and significantly degraded.
+Tolerates noise, smooths result, can lose detail.
+Recommended
+Match this to the quality choice above
+Hover / tap your image to see the quality level.
+Look at the fine detail of your image. Zoomed out images look better than they are.
+What is the quality level (not resolution) of your image?
+High
+Color is constant within the different regions.
+Sharp and not degraded.
+Recovers details, sensitive to noise.
+Recommended
+Medium
+Color is fairly constant within the different regions.
+Somewhat degraded.
+Recommended
+Low
+Color varies a lot within the different regions.
+Blurry and significantly degraded.
+Tolerates noise, smooths result, can lose detail.
+Recommended
+Match this to the quality choice above
+Hover / tap your image to see the quality level.
+Look at the fine detail of your image. Zoomed out images look better than they are.
+How should colors be handled?
+Unlimited colors
+Use all colors necessary.
+Good for gradients.
+May leave errors  from noise or blurriness.
+Recommended
+Custom colors
+Review suggested colors.
+Use only colors you specify.
+Can reduce errors from noise or blurriness.
+Recommended
+Suggested palettes
+Custom palette
+Select a color above, then use the eye-dropper on the image to change it.
+Opacity (0–255)
+Improve result
+Adjust the detail level and colors to get the best result.
+Scan or drawing?
+Process as artwork
+Spots between edges?
+Process with blending
+Extremely jagged edges?
+Process without blending
+Detail level
+Low
+Medium
+High
+Colors
+Unlimited
+Custom
+Edit
+Advanced
+Edit Result
+Remove Background
+Hand-pick Settings
+Edit resultThe purpose of this page is to let you manually correct segmentation mistakes made by Vector Magic. The segmentation is the crude partitioning of the image into pieces that are then smoothed to produce the final vector art.
+Flip between the original bitmap, the segmentation and the vectorized result to see where there are errors.
+Sometimes the finer details are not recovered automatically and you get a pinching effect in the result. The Finder can help point out some of these tricky areas - you need to edit the pixels so that the region you are interested in has a clear path.
+BitmapSegm.Vector
+Sometimes there are remnants of anti-aliasing left in the segmentation. The Zap tool helps you here by splitting a segment into pieces and merging these with the neighboring segments.
+BitmapSegm.Vector
+Try it out! You can always undo or reset your edits.
+Edits made are saved to the server when you hit Next. Edits will be lost if you leave or reload this page before saving.
+Analyzing the image failedWe're terribly sorry, but we encountered an error analyzing your image: Retry
+Vectorizing the image failedWe're terribly sorry, but we encountered an error vectorizing your image: Retry Change Settings Edit Segmentation
+Fetching the segmentation failedWe're terribly sorry, but we encountered an error fetching your image's segmentation. This should be temporary, please try again in a few seconds. Retry
+Back
+Next
+Download
+Preferences
+Fully Automatic
+Vector Magic picks suitable settings and vectorizes each image as soon as it is uploaded. Turn this off to choose the settings yourself.
+Pre-Crop
+When an image is over the size limit, you first crop away the parts you don't need, so the area you want is vectorized at the highest resolution.
+Close
+Loading...
+Cancel
+Saving...
+Cancel
+Loading...
+Cancel
+Network Error
+Persistent network problems are usually caused by misbehaving browser plugins, misconfigured proxies, or overly restrictive firewalls.
+Please check your settings or try another browser or computer.
+Exit ApplicationRetry Now
+Fatal Error :-(
+Close
+Pre-Crop
+Your image size exceeds the size limit. For best results, please crop the image to the portion you wish to vectorize.
+Size Limit
+Original Image
+Size:
+Aspect Ratio:
+Megapixels:
+Cropped Image
+Size:
+Aspect Ratio:
+Megapixels:
+Cropped image exceeds size limit and will be scaled to fit.
+Size limit met, full resolution preserved.
+Cancel
+Ok
+Paste Target
