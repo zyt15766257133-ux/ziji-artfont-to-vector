@@ -100,6 +100,8 @@ const state = {
   inspect: null, stage: 'preprocess',
   jobId: null, pollTimer: null,
   history: [], queue: [], batchFilter: 'all', batchRunning: false,
+  layerEditor: null, editedSvg: null, layerLimit: 60, layerFrame: null,
+  historyOnly: false, historyItem: null,
 };
 
 /* ------------------------------------------------------------ 基础工具 */
@@ -186,12 +188,15 @@ function applyPreset(key) {
   const sourceMode = ['fidelity', 'pixel_exact'].includes(key);
   const pixelMode = key === 'pixel_exact';
   [...PARAM_IDS, 'auto_verify'].forEach((id) => { $(`#${id}`).disabled = sourceMode; });
+  $$('.field[data-param]').forEach(field => { field.hidden = sourceMode; });
+  $('#auto-verify-row').hidden = sourceMode;
   $('#spot_matching').disabled = pixelMode;
   $('#spot_colors').disabled = pixelMode;
   $('#soft-effects-row').hidden = key !== 'fidelity';
   Object.entries(table).forEach(([k, v]) => { $(`#${k}`).value = v; });
   syncOutputs();
   renderPresetSummary();
+  $('#preset-hint').textContent = $(`#preset-group [data-preset="${key}"]`)?.dataset.desc || '';
 }
 
 function renderPresetSummary() {
@@ -252,10 +257,22 @@ function setPhase(phase) {
 function render() {
   const { mode, phase, stale } = state;
   const single = mode === 'single';
+  document.body.dataset.phase = phase;
+  document.body.dataset.mode = mode;
+  $('#welcome').hidden = !(single && phase === 'empty');
+  $('#quick-samples').hidden = !(single && phase === 'empty');
+  $('#sidebar').hidden = single && phase !== 'result';
+  $('#color-layer-card').hidden = !single || phase !== 'result';
+  $('#settings-scope').textContent = single ? '当前图片' : '应用于整个队列';
+  $('#batch-format').hidden = single;
+  $('#rerun-convert').hidden = !single || phase !== 'result';
+  $('#rerun-convert').disabled = !state.file || state.historyOnly;
+  $('#canvas-toolbar').hidden = !single || phase !== 'result';
+  $('#result-details').hidden = !single || phase !== 'result';
 
   $('#pane-batch').hidden = single;
   $('#stage').hidden = !single;
-  $('#action-bar').hidden = !single;
+  $('#action-bar').hidden = !single || phase === 'empty';
   $('#check-card').hidden = !(single && phase === 'inspect');
 
   // 画布四态
@@ -263,11 +280,21 @@ function render() {
   $('#inspect-preview').hidden = !(phase === 'inspect');
   $('#loader').hidden = !(phase === 'converting');
   const showResultView = phase === 'result';
+  $('#layer-vector').hidden = !(showResultView && state.view === 'vector');
   $('#layer-slider').hidden = !(showResultView && state.view === 'slider');
   $('#layer-side').hidden = !(showResultView && state.view === 'side');
   $('#layer-diff').hidden = !(showResultView && state.view === 'diff');
   $('#layer-code').hidden = !(showResultView && state.view === 'code');
   $('#metric-strip').hidden = !showResultView;
+  const edited = !!state.editedSvg;
+  $('#edit-notice').hidden = !edited;
+  $('#metrics-note').textContent = edited
+    ? '以下为颜色图层编辑前的转换记录。当前改色和隐藏操作尚未重新评估。'
+    : '这些自动诊断用于辅助检查，请结合画布确认效果。';
+  $('#view-group [data-view="diff"]').disabled = edited || !state.result?.preview_png;
+  $$('#view-group [data-view="slider"], #view-group [data-view="side"]').forEach(button => {
+    button.disabled = state.historyOnly;
+  });
 
   renderVerdict();
   renderActions();
@@ -367,7 +394,7 @@ function renderActions() {
   show('#act-repick', phase === 'inspect' || phase === 'result');
   show('#act-close', phase === 'inspect' || phase === 'result');
   show('#act-copy', phase === 'result');
-  show('#act-compare', phase === 'result' && !!state.result?.preview_png);
+  show('#act-compare', phase === 'result' && !!state.result?.preview_png && !state.editedSvg);
   show('#act-download-old', phase === 'result' && stale);
   show('#format-group', phase === 'result');
 
@@ -399,7 +426,11 @@ function renderActions() {
   else {
     const d = state.result || {};
     $('#file-meta').textContent =
-      `${d.size?.width ?? '?'} × ${d.size?.height ?? '?'} · 引擎 ${d.metrics?.engine || 'contour'} · ${Math.round(d.elapsed_ms || 0)} ms`;
+      `${d.size?.width ?? '?'} × ${d.size?.height ?? '?'} · ${Math.round(d.elapsed_ms || 0)} ms${state.editedSvg ? ' · 已编辑' : ''}`;
+  }
+  if (state.historyOnly && phase === 'result' && stale) {
+    primary.disabled = true;
+    $('#file-meta').textContent = '历史记录没有原图，请重新上传后转换';
   }
 }
 
@@ -507,6 +538,84 @@ function renderMetrics(data) {
     const exp = btn.querySelector('.exp');
     exp.hidden = !exp.hidden;
   }));
+  $('#source-palette').innerHTML = renderSourceColors(m.source_colors);
+}
+
+/* ------------------------------------------------------------ 输出颜色图层 */
+function currentSvg() {
+  return state.editedSvg || state.result?.svg || '';
+}
+
+function initColorLayers(svg) {
+  if (state.layerFrame) cancelAnimationFrame(state.layerFrame);
+  state.layerFrame = null;
+  state.layerEditor = SVGColorLayers.parse(svg);
+  state.editedSvg = null;
+  state.layerLimit = 60;
+  renderColorLayers();
+}
+
+function renderColorLayers() {
+  const layers = state.layerEditor?.layers || [];
+  $('#layer-count').textContent = layers.length;
+  $('#color-layer-list').innerHTML = layers.slice(0, state.layerLimit).map(layer => {
+    const label = layer.gradient ? '渐变' : layer.color || '原始绘制';
+    const type = layer.kind === 'effect' ? '柔光效果' : layer.kind === 'stroke' ? '描边' : layer.gradient ? '渐变填充 · 保留原渐变' : '纯色填充';
+    return `<div class="color-layer ${layer.visible ? '' : 'is-hidden'}" data-layer="${layer.id}">
+      <label class="layer-swatch" style="background:${layer.swatch}" title="${layer.color ? '修改颜色' : '保留原始渐变或绘制方式'}">
+        ${layer.color ? `<input type="color" value="${layer.color}" data-layer-color="${layer.id}" aria-label="修改 ${layer.originalColor} ${type}">` : ''}
+      </label>
+      <div class="layer-info"><strong>${escapeHtml(label)}</strong><span>${type} · ${layer.targets.length} 个绘制对象</span></div>
+      <button class="layer-visibility" data-layer-toggle="${layer.id}" aria-pressed="${layer.visible}" aria-label="${layer.visible ? '隐藏' : '显示'} ${escapeHtml(label)} 图层" title="${layer.visible ? '隐藏图层' : '显示图层'}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${layer.visible ? '' : '<path d="m3 3 18 18"/>'}</svg>
+      </button></div>`;
+  }).join('') || '<p class="hint">当前结果没有可独立调整的颜色层。</p>';
+  if (layers.length > state.layerLimit) {
+    $('#color-layer-list').insertAdjacentHTML('beforeend', `<button class="text-btn" id="show-all-layers">显示全部 ${layers.length} 个颜色层</button>`);
+  }
+  syncLayerStatus();
+}
+
+function syncLayerStatus() {
+  const model = state.layerEditor;
+  const edited = SVGColorLayers.changed(model);
+  const hidden = model?.layers.filter(layer => !layer.visible).length || 0;
+  $('#reset-layers').disabled = !edited;
+  $('#layer-edit-status').textContent = edited ? `已编辑${hidden ? ` · 隐藏 ${hidden} 层` : ' · 导出同步'}` : '保留转换原色';
+}
+
+function refreshVectorPreview() {
+  if (state.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(state.previewUrl);
+  state.previewUrl = URL.createObjectURL(new Blob([currentSvg()], { type: 'image/svg+xml' }));
+  ['#ls-out', '#side-out', '#vector-out'].forEach(selector => { $(selector).src = state.previewUrl; });
+  $('#layer-code').textContent = currentSvg();
+}
+
+function applyLayerEdits() {
+  state.layerFrame = null;
+  const model = state.layerEditor;
+  if (!model) return;
+  state.editedSvg = SVGColorLayers.changed(model) ? SVGColorLayers.serialize(model) : null;
+  refreshVectorPreview();
+  syncLayerStatus();
+  if (state.editedSvg) switchView('vector');
+  else render();
+}
+
+function flushLayerEdits() {
+  if (!state.layerFrame) return;
+  cancelAnimationFrame(state.layerFrame);
+  applyLayerEdits();
+}
+
+function saveLayerHistory() {
+  flushLayerEdits();
+  if (!state.historyItem || !state.layerEditor) return;
+  state.historyItem.svg = currentSvg();
+  state.historyItem.originalSvg = state.editedSvg ? state.layerEditor.original : undefined;
+  state.historyItem.layerEdits = state.editedSvg ? state.layerEditor.layers.map(({ color, visible }) => ({ color, visible })) : undefined;
+  saveHistory();
+  renderHistory();
 }
 
 /* ------------------------------------------------------------ 对比与缩放 */
@@ -520,8 +629,10 @@ function setWipe(percent) {
 
 function fitView() {
   const body = $('#canvas');
-  const maxW = Math.max(280, body.clientWidth - 60);
-  const maxH = 420;
+  const gap = window.innerWidth <= 480 ? 32 : 64;
+  const available = Math.max(100, body.clientWidth - gap);
+  const maxW = state.view === 'side' ? Math.max(80, (available - 20) / 2) : available;
+  const maxH = Math.max(180, body.clientHeight - gap - (state.view === 'side' ? 30 : 0));
   const ar = (state.result?.size?.width || 1) / (state.result?.size?.height || 1);
   let w = maxW;
   let h = w / ar;
@@ -533,7 +644,7 @@ function fitView() {
 
 function applyZoom() {
   const w = Math.round(state.fitWidth * state.zoom);
-  ['#layer-slider', '#layer-side', '#layer-diff'].forEach((sel) => {
+  ['#layer-slider', '#layer-side', '#layer-diff', '#layer-vector'].forEach((sel) => {
     $(sel)?.style.setProperty('--view-w', `${w}px`);
   });
   const ar = (state.result?.size?.width || 1) / (state.result?.size?.height || 1);
@@ -544,11 +655,27 @@ function switchView(view) {
   state.view = view;
   $$('#view-group .seg, #view-group button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
   render();
-  if (view !== 'code') requestAnimationFrame(applyZoom);
+  if (view !== 'code') requestAnimationFrame(fitView);
 }
 
 /* ------------------------------------------------------------ 转换流程 */
 async function inspectFile(file) {
+  saveLayerHistory();
+  if (state.jobId) {
+    fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
+    state.jobId = null;
+  }
+  clearTimeout(state.pollTimer);
+  if (state.layerFrame) cancelAnimationFrame(state.layerFrame);
+  state.layerFrame = null;
+  // 新素材不能沿用上一张的结果或可重新转换标记。
+  state.historyOnly = false;
+  state.result = null;
+  state.editedSvg = null;
+  state.layerEditor = null;
+  state.paramsUsed = null;
+  state.historyItem = null;
+  if (state.sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(state.sourceUrl);
   state.file = file;
   state.fileName = file.name;
   state.sourceUrl = URL.createObjectURL(file);
@@ -609,7 +736,9 @@ function renderInspect(data) {
 }
 
 async function startConvert() {
-  if (!state.file) return;
+  if (!state.file || state.historyOnly) return;
+  if (state.jobId) return;
+  saveLayerHistory();
   state.paramsUsed = { ...readParams() };
   state.startedAt = performance.now();
   setPhase('converting');
@@ -690,6 +819,7 @@ function cancelJob() {
 
 /* 关闭回空态：结果已入「最近转换」，无需确认 */
 function closeToEmpty() {
+  saveLayerHistory();
   if (state.jobId) {
     fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
     state.jobId = null;
@@ -703,12 +833,19 @@ function closeToEmpty() {
   state.fileName = '';
   state.sourceUrl = null;
   state.alignedUrl = null;
+  if (state.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(state.previewUrl);
+  if (state.layerFrame) cancelAnimationFrame(state.layerFrame);
   state.previewUrl = null;
+  state.layerFrame = null;
+  state.layerEditor = null;
+  state.editedSvg = null;
+  state.historyOnly = false;
+  state.historyItem = null;
   state.inspect = null;
   state.result = null;
   state.paramsUsed = null;
   state.stale = false;
-  ['#ls-in', '#ls-out', '#side-in', '#side-out', '#diff-img', '#inspect-preview'].forEach((s) => { $(s).src = ''; });
+  ['#ls-in', '#ls-out', '#side-in', '#side-out', '#vector-out', '#diff-img', '#inspect-preview'].forEach((s) => { $(s).removeAttribute('src'); });
   $('#layer-code').textContent = '';
   setPhase('empty');
   toast('已关闭，结果保存在「最近转换」');
@@ -717,11 +854,12 @@ function closeToEmpty() {
 function showResult(data) {
   state.result = data;
   state.stale = false;
+  state.historyOnly = false;
+  state.view = 'slider';
+  initColorLayers(data.svg);
   setPhase('result');
 
-  const svgUrl = svgDataUrl(data.svg);
-  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
-  state.previewUrl = svgUrl;
+  refreshVectorPreview();
 
   if (state.alignedUrl && state.alignedUrl !== state.sourceUrl) URL.revokeObjectURL(state.alignedUrl);
   state.alignedUrl = data.source_png
@@ -729,19 +867,18 @@ function showResult(data) {
     : state.sourceUrl;
 
   $('#ls-in').src = state.alignedUrl || '';
-  $('#ls-out').src = svgUrl;
   $('#side-in').src = state.alignedUrl || '';
-  $('#side-out').src = svgUrl;
   $('#layer-code').textContent = data.svg;
   if (data.preview_png) {
     $('#diff-img').src = `data:image/png;base64,${data.preview_png}`;
   }
 
   renderMetrics(data);
+  $$('#view-group button').forEach(button => button.classList.toggle('on', button.dataset.view === state.view));
   requestAnimationFrame(() => { fitView(); setWipe(50); });
   render();
   pushHistory(data);
-  if (data.warnings?.length) toast(data.warnings.slice(0, 2).join('；'), 'warn', 5000);
+  // 质量提醒已完整呈现在画布上方，不再用浮层重复遮挡画布和导出操作。
 }
 
 /* ------------------------------------------------------------ 历史 */
@@ -777,6 +914,7 @@ function pushHistory(data) {
     svg: data.svg, warnings: data.warnings || [],
   };
   state.history.unshift(item);
+  state.historyItem = item;
   if (state.history.length > 20) state.history.length = 20;
   saveHistory();
   renderHistory();
@@ -808,25 +946,35 @@ function renderHistory() {
 function openHistory(i) {
   const it = state.history[i];
   if (!it) return;
+  if (state.jobId) { toast('请先取消当前转换，再打开历史记录', 'warn'); return; }
+  saveLayerHistory();
+  state.historyItem = it;
+  state.file = null;
+  state.historyOnly = true;
   state.result = {
-    filename: it.filename, stem: it.stem, svg: it.svg, metrics: it.metrics,
+    filename: it.filename, stem: it.stem, svg: it.originalSvg || it.svg, metrics: it.metrics,
     quality: it.quality, size: it.size, elapsed_ms: it.elapsed_ms, warnings: it.warnings, stats: it.stats,
   };
   state.paramsUsed = it.params;
-  PARAM_IDS.forEach((id) => { if (it.params?.[id] !== undefined) $(`#${id}`).value = it.params[id]; });
-  $('#spot_colors').value = it.params?.spot_colors ?? '';
-  $('#spot_matching').classList.toggle('off', !it.params?.spot_matching);
-  $('#spot_matching').setAttribute('aria-pressed', String(!!it.params?.spot_matching));
-  syncOutputs();
+  restoreParams();
+  state.fmt = it.fmt || 'svg';
+  $$('#format-group button').forEach(button => button.classList.toggle('on', button.dataset.fmt === state.fmt));
   state.fileName = it.filename;
   state.stale = false;
+  state.view = 'vector';
+  initColorLayers(it.originalSvg || it.svg);
+  if (it.layerEdits && state.layerEditor) {
+    state.layerEditor.layers.forEach((layer, index) => {
+      Object.assign(layer, it.layerEdits[index] || {});
+      if (layer.color) layer.swatch = layer.color;
+    });
+    state.editedSvg = SVGColorLayers.changed(state.layerEditor) ? SVGColorLayers.serialize(state.layerEditor) : null;
+    renderColorLayers();
+  }
   setPhase('result');
-  const svgUrl = svgDataUrl(it.svg);
-  $('#ls-out').src = svgUrl;
-  $('#ls-in').src = state.alignedUrl || '';
-  $('#side-out').src = svgUrl;
-  $('#side-in').src = state.alignedUrl || '';
-  $('#layer-code').textContent = it.svg;
+  refreshVectorPreview();
+  ['#ls-in', '#side-in', '#diff-img'].forEach(selector => $(selector).removeAttribute('src'));
+  $$('#view-group button').forEach(button => button.classList.toggle('on', button.dataset.view === state.view));
   renderMetrics(state.result);
   requestAnimationFrame(() => { fitView(); setWipe(50); });
   render();
@@ -1204,6 +1352,8 @@ function switchMode(mode) {
   $$('#mode-group button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
   render();
   renderQueue();
+  $('#sidebar').scrollTop = 0;
+  if (mode === 'single' && state.phase === 'result') requestAnimationFrame(fitView);
 }
 
 function bind() {
@@ -1213,15 +1363,20 @@ function bind() {
     if (btn) switchMode(btn.dataset.mode);
   });
   $('#open-history').addEventListener('click', openDrawer);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#help-menu')) $('#help-menu').open = false;
+  });
   $('#drawer-close').addEventListener('click', closeDrawer);
   $('#drawer-mask').addEventListener('click', closeDrawer);
   $('#history-clear').addEventListener('click', () => {
     state.history = [];
+    state.historyItem = null;
     saveHistory();
     renderHistory();
     toast('历史已清空');
   });
   $('#history-export').addEventListener('click', () => {
+    saveLayerHistory();
     const withSvg = state.history.filter((x) => x.svg);
     if (!withSvg.length) { toast('历史里没有可导出的文件', 'warn'); return; }
     const files = withSvg.map((x) => ({ name: `${x.stem}.svg`, data: new TextEncoder().encode(x.svg) }));
@@ -1248,11 +1403,49 @@ function bind() {
   $('#glyph_count').addEventListener('input', markParamsChanged);
   $('#spot_colors').addEventListener('input', markParamsChanged);
   $('#restore-params').addEventListener('click', restoreParams);
+  $('#rerun-convert').addEventListener('click', startConvert);
+  $('#color-layer-list').addEventListener('click', e => {
+    if (e.target.closest('#show-all-layers')) {
+      state.layerLimit = state.layerEditor?.layers.length || 60;
+      renderColorLayers();
+      return;
+    }
+    const button = e.target.closest('[data-layer-toggle]');
+    if (!button) return;
+    flushLayerEdits();
+    const layer = state.layerEditor?.layers[Number(button.dataset.layerToggle)];
+    if (!layer) return;
+    layer.visible = !layer.visible;
+    applyLayerEdits();
+    renderColorLayers();
+    saveLayerHistory();
+  });
+  $('#color-layer-list').addEventListener('input', e => {
+    const input = e.target.closest('[data-layer-color]');
+    if (!input) return;
+    const layer = state.layerEditor?.layers[Number(input.dataset.layerColor)];
+    if (!layer) return;
+    layer.color = input.value.toUpperCase();
+    layer.swatch = layer.color;
+    const row = input.closest('.color-layer');
+    row.querySelector('.layer-swatch').style.background = layer.color;
+    row.querySelector('strong').textContent = layer.color;
+    if (state.layerFrame) cancelAnimationFrame(state.layerFrame);
+    state.layerFrame = requestAnimationFrame(applyLayerEdits);
+  });
+  $('#color-layer-list').addEventListener('change', saveLayerHistory);
+  $('#reset-layers').addEventListener('click', () => {
+    if (!state.layerEditor) return;
+    initColorLayers(state.layerEditor.original);
+    refreshVectorPreview();
+    render();
+    saveLayerHistory();
+  });
 
   // 视图 / 底色 / 缩放
   $('#view-group').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
-    if (btn) switchView(btn.dataset.view);
+    if (btn && !btn.disabled) switchView(btn.dataset.view);
   });
   $('#bg-group').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
@@ -1346,7 +1539,8 @@ function bind() {
   $('#act-copy').addEventListener('click', async () => {
     if (!state.result) return;
     try {
-      await navigator.clipboard.writeText(state.result.svg);
+      saveLayerHistory();
+      await navigator.clipboard.writeText(currentSvg());
       toast('SVG 源码已复制到剪贴板');
     } catch {
       toast('复制失败，请用「源码」视图手动复制', 'warn');
@@ -1360,12 +1554,19 @@ function bind() {
     const btn = e.target.closest('button');
     if (!btn) return;
     state.fmt = btn.dataset.fmt;
+    $('#batch-output-format').value = state.fmt;
     $$('#format-group button').forEach((b) => b.classList.toggle('on', b === btn));
     renderActions();
     renderQueue();
   });
 
   // 批量
+  $('#batch-output-format').addEventListener('change', e => {
+    state.fmt = e.target.value;
+    $$('#format-group button').forEach(button => button.classList.toggle('on', button.dataset.fmt === state.fmt));
+    renderActions();
+    renderQueue();
+  });
   $('#batch-add').addEventListener('click', () => $('#file-batch').click());
   $('#batch-folder').addEventListener('click', () => $('#file-folder').click());
   $('#file-batch').addEventListener('change', (e) => { addToQueue([...e.target.files]); e.target.value = ''; });
@@ -1393,6 +1594,8 @@ function bind() {
   // 键盘
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if ($('#help-menu').open) { $('#help-menu').open = false; return; }
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
     if (!$('#tip-pop')?.hidden) { hideTip(); return; }
     if (!$('#sample-modal').hidden) { closeSampleModal(); return; }
     if (!$('#clear-pop').hidden) { $('#clear-pop').hidden = true; return; }
@@ -1411,12 +1614,13 @@ function bind() {
 function downloadResult() {
   const data = state.result;
   if (!data) return;
+  saveLayerHistory();
   if (state.fmt === 'svg') {
-    download(new Blob([data.svg], { type: 'image/svg+xml' }), `${data.stem}.svg`);
+    download(new Blob([currentSvg()], { type: 'image/svg+xml' }), `${data.stem}.svg`);
     return;
   }
   const fd = new FormData();
-  fd.append('svg', data.svg);
+  fd.append('svg', currentSvg());
   fd.append('fmt', state.fmt);
   fd.append('stem', data.stem);
   fetch('/api/export', { method: 'POST', body: fd })
@@ -1437,6 +1641,7 @@ async function addSamplesToQueue(names) {
     state.queue.push({ file: new File([blob], pick.file, { type: blob.type || 'image/png' }), status: 'idle' });
   }
   renderQueue();
+
   runBatch();
 }
 
@@ -1469,6 +1674,16 @@ async function init() {
   loadHistory();
   render();
   renderQueue();
+
+  fetch('/api/samples').then(r => r.json()).then(data => {
+    const picks = (data.samples || []).filter(sample => /^(01_|02_|08_|13_)/.test(sample.file));
+    const samples = picks.length >= 4 ? picks.slice(0, 4) : (data.samples || []).slice(0, 4);
+    $('#quick-sample-grid').innerHTML = samples.map(sample => `<button class="quick-sample" data-sample="${escapeHtml(sample.file)}"><img src="${escapeHtml(sample.url)}" alt="${escapeHtml(sample.style || sample.file)}"><span>${escapeHtml(sample.style || sample.file)}</span></button>`).join('');
+  }).catch(() => {});
+  $('#quick-sample-grid').addEventListener('click', e => {
+    const button = e.target.closest('[data-sample]');
+    if (button) loadSample(button.dataset.sample);
+  });
 
   // 演示直达：?sample=13_cartoon.png&stale=1&history=1&inspect=1&mode=batch&samples=a,b,c
   const qs = new URLSearchParams(location.search);

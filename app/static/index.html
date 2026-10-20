@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>字迹 · 艺术字转矢量</title>
-<link rel="stylesheet" href="/static/style.css?v=source-colors-20261019">
+<link rel="stylesheet" href="/static/style.css?v=studio-20261020">
 </head>
-<body>
+<body data-phase="empty" data-mode="single">
 <header class="topbar">
   <div class="logo">字</div>
-  <div class="brand"><b>字迹</b><span>艺术字位图转可编辑矢量</span></div>
+  <div class="brand"><b>字迹<span class="brand-dot"> / </span><span class="brand-tool">矢量工作台</span></b><span>留住每一笔灵感</span></div>
   <div class="mid">
     <div class="seg" id="mode-group">
       <button class="on" data-mode="single">单张转换</button>
@@ -18,26 +18,43 @@
   </div>
   <div class="right">
     <button class="btn ghost" id="open-history">最近转换<span class="count" id="history-count" hidden>0</span></button>
-    <div class="status" id="health"><i></i><span>服务检测中…</span></div>
-    <a class="btn" href="/validation">验证报告</a>
-    <a class="btn" href="/fidelity-results/report.html">25 张逐图对比</a>
-    <a class="btn" href="/docs" target="_blank" rel="noopener">接口文档</a>
+    <details class="help-menu" id="help-menu">
+      <summary>帮助 <span aria-hidden="true">⌄</span></summary>
+      <div class="help-popover">
+        <div class="status" id="health"><i></i><span>服务检测中…</span></div>
+        <a href="/validation" target="_blank" rel="noopener">验证报告 ↗</a>
+        <a href="/fidelity-results/report.html" target="_blank" rel="noopener">逐图效果对比 ↗</a>
+        <a href="/docs" target="_blank" rel="noopener">接口文档 ↗</a>
+      </div>
+    </details>
   </div>
 </header>
 
 <main class="page">
+  <section class="welcome" id="welcome">
+    <p class="eyebrow">从像素，到可编辑的线条</p>
+    <h1>让好看的字，<span>自由放大。</span></h1>
+    <p>上传艺术字、手写字或标志图片，转换为可编辑的 SVG。</p>
+  </section>
   <div class="shell">
     <!-- 侧栏参数 -->
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" hidden aria-label="转换设置">
+      <section class="card layer-card" id="color-layer-card" hidden>
+        <div class="panel-heading"><h2>颜色图层</h2><span id="layer-count" class="panel-count">0</span></div>
+        <p class="panel-caption">点击色块改色，切换眼睛显示或隐藏。</p>
+        <div class="layer-list" id="color-layer-list"></div>
+        <div class="layer-footer"><span id="layer-edit-status" role="status">保留转换原色</span><button class="text-btn" id="reset-layers" disabled>恢复原始</button></div>
+        <details class="source-reference"><summary>原图取色参考</summary><div id="source-palette"></div></details>
+      </section>
       <section class="card">
-        <h2>输出档位</h2>
-        <div class="seg plain" id="preset-group" style="flex-direction:column"></div>
+        <div class="panel-heading"><h2>转换设置</h2><span class="panel-caption" id="settings-scope">当前图片</span></div>
+        <div class="seg plain" id="preset-group"></div>
         <div class="pillrow" id="preset-summary"></div>
         <p class="hint" id="preset-hint"></p>
       </section>
 
-      <section class="card" id="param-card">
-        <h2>参数 · 选填</h2>
+      <details class="card advanced" id="param-card">
+        <summary>高级参数 <span>按需调整</span></summary>
         <div id="param-box">
           <div class="toggle" id="soft-effects-row"><span>光晕与软阴影补偿<em>兼容滤镜；适用素材支持字身与光晕联动</em></span><button class="switch" id="soft_effects" aria-pressed="true" aria-label="光晕与软阴影补偿"></button></div>
           <div class="field" data-param="tolerance">
@@ -64,7 +81,7 @@
             <div class="top-row"><label for="corner_angle">角点判定角</label><button class="tip" type="button" data-tip="corner_angle" aria-label="角点判定角说明">i</button><span class="val" id="corner_angle-out"></span></div>
             <input type="range" id="corner_angle" min="30" max="120" step="1">
           </div>
-          <div class="toggle"><span>第三方引擎兜底<em>不达标时与 vtracer 对比取优（本地库）</em></span><button class="tip" type="button" data-tip="auto_verify" aria-label="第三方引擎兜底说明">i</button><button class="switch" id="auto_verify" aria-pressed="true" aria-label="第三方引擎兜底"></button></div>
+          <div class="toggle" id="auto-verify-row"><span>第三方引擎兜底<em>不达标时与 vtracer 对比取优（本地库）</em></span><button class="tip" type="button" data-tip="auto_verify" aria-label="第三方引擎兜底说明">i</button><button class="switch" id="auto_verify" aria-pressed="true" aria-label="第三方引擎兜底"></button></div>
           <div class="toggle"><span>严格校验素材<em>不合格素材直接拒绝</em></span><button class="tip" type="button" data-tip="strict_input" aria-label="严格校验素材说明">i</button><button class="switch off" id="strict_input" aria-pressed="false" aria-label="严格校验素材"></button></div>
           <div class="field">
             <div class="top-row"><label for="glyph_count">图中字数（选填）</label></div>
@@ -80,8 +97,10 @@
           </div>
         </div>
         <button class="btn ghost sm" id="restore-params" style="width:100%;margin-top:14px" hidden>恢复本次转换的参数</button>
-        <p class="hint" id="param-hint">不确定就别动这些。<b>参数改动后结果区会提示重新转换。</b></p>
-      </section>
+        <p class="hint" id="param-hint">默认设置适合先看效果。参数修改后，重新转换生效。</p>
+      </details>
+      <button class="btn rerun-btn" id="rerun-convert" hidden>重新转换</button>
+      <div class="batch-format" id="batch-format" hidden><label for="batch-output-format">批量输出格式</label><select id="batch-output-format"><option value="svg">SVG</option><option value="pdf">PDF</option><option value="eps">EPS</option><option value="ai">AI</option></select></div>
     </aside>
 
     <!-- 工作区 -->
@@ -107,8 +126,9 @@
 
       <!-- 单张舞台 -->
       <section class="stage card" id="stage">
-        <div class="stage-bar">
+        <div class="stage-bar" id="canvas-toolbar" hidden>
           <div class="seg plain" id="view-group">
+            <button data-view="vector">矢量</button>
             <button class="on" data-view="slider">对比滑块</button>
             <button data-view="side">并排</button>
             <button data-view="diff">差异</button>
@@ -116,9 +136,9 @@
           </div>
           <div class="right">
             <div class="seg plain" id="bg-group">
-              <button class="on" data-bg="checker">棋盘底</button>
-              <button data-bg="light">浅色底</button>
-              <button data-bg="dark">深色底</button>
+              <button class="on bg-swatch checker" data-bg="checker" aria-label="棋盘底" title="棋盘底"></button>
+              <button class="bg-swatch light" data-bg="light" aria-label="浅色底" title="浅色底"></button>
+              <button class="bg-swatch dark" data-bg="dark" aria-label="深色底" title="深色底"></button>
             </div>
             <button class="iconbtn" id="zoom-out" title="缩小" aria-label="缩小">−</button>
             <button class="iconbtn" id="zoom-reset">适应</button>
@@ -129,22 +149,18 @@
         <div class="canvas" id="canvas">
           <!-- 空态 -->
           <div class="hero" id="empty-state">
-            <svg class="art" viewBox="0 0 120 86" aria-hidden="true">
-              <rect x="6" y="10" width="44" height="66" rx="8" fill="none" stroke="#9AA2B1" stroke-width="2.4" stroke-dasharray="6 6"/>
-              <path d="M20 60 L32 30 L44 60 M24 51 H40" fill="none" stroke="#9AA2B1" stroke-width="3" stroke-linecap="round"/>
-              <path d="M66 22 H112 M66 40 H102 M66 58 H112 M66 74 H92" stroke="#C6CCD8" stroke-width="3.4" stroke-linecap="round"/>
-            </svg>
-            <h3>把艺术字图片放到这里</h3>
-            <p>拖拽、粘贴（Ctrl+V）或选择文件　·　PNG / JPG / WEBP　·　≤ 5MB</p>
+            <div class="upload-art" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M19 15h20l9 9v25H19z"/><path d="M39 15v10h9M27 39l7-7 7 7M34 33v12"/><rect x="13" y="9" width="8" height="8"/><rect x="45" y="46" width="8" height="8"/></svg></div>
+            <h3>把图片拖到这里</h3>
+            <p>也可以粘贴图片 <kbd>Ctrl</kbd> + <kbd>V</kbd></p>
             <div class="row">
-              <button class="btn primary" id="pick-file" style="padding:13px 28px;font-size:14px">选择文件</button>
-              <button class="btn soft" id="load-sample">载入示例素材</button>
+              <button class="btn primary" id="pick-file">选择图片 <span aria-hidden="true">↗</span></button>
             </div>
-            <p class="paste">主体占画面 ≥ 60% 效果最好，上传后会先做素材预检</p>
+            <p class="paste">PNG / JPG / WEBP · 最大 5 MB · 本地服务处理</p>
           </div>
 
           <!-- 预检预览 -->
           <img class="inspect-preview" id="inspect-preview" hidden alt="待转换原图">
+          <div class="layer-output" id="layer-vector" hidden><img id="vector-out" alt="矢量结果"></div>
 
           <!-- 转换中 -->
           <div class="prog" id="loader" hidden>
@@ -185,11 +201,13 @@
           <pre class="layer-code" id="layer-code" hidden></pre>
         </div>
 
-        <div class="metrics" id="metric-strip" hidden></div>
+        <div class="edit-notice" id="edit-notice" hidden role="status">颜色图层已编辑，预览和导出已同步。转换指标为编辑前记录，恢复原始后可查看原始差异图。</div>
       </section>
 
+      <section class="quick-samples" id="quick-samples"><div class="sample-caption"><span>没有图片？试试这些</span><button class="text-btn" id="load-sample">全部示例 ↗</button></div><div class="quick-sample-grid" id="quick-sample-grid"></div></section>
+
       <!-- 动作条 -->
-      <div class="actions card" id="action-bar">
+      <div class="actions card" id="action-bar" hidden>
         <div class="file"><b id="file-name">还没有素材</b><span id="file-meta">选好文件后自动进入预检与转换</span></div>
         <div class="grow"></div>
         <button class="btn ghost" id="act-repick" hidden>换一张</button>
@@ -205,6 +223,8 @@
         </div>
         <button class="btn primary" id="act-primary" disabled>下载 SVG</button>
       </div>
+
+      <details class="result-details card" id="result-details" hidden><summary>转换详情 <span>质量诊断、节点与原图颜色</span></summary><p class="details-note" id="metrics-note">这些自动诊断用于辅助检查，请结合画布确认效果。</p><div class="metrics" id="metric-strip" hidden></div></details>
 
       <!-- 批量 -->
       <div id="pane-batch" hidden style="display:flex;flex-direction:column;gap:16px">
@@ -286,6 +306,7 @@
 <input type="file" id="file-batch" accept="image/png,image/jpeg,image/webp" multiple hidden>
 <input type="file" id="file-folder" webkitdirectory directory multiple hidden>
 <div class="toast-host" id="toast-host"></div>
-<script src="/static/app.js?v=source-colors-20261019"></script>
+<script src="/static/color-layers.js?v=studio-20261020"></script>
+<script src="/static/app.js?v=studio-20261020"></script>
 </body>
 </html>
