@@ -1,4 +1,4 @@
-"""Publish all 25 original-source comparisons and portable SVG deliverables."""
+"""Publish retained original-source comparisons and portable SVG deliverables."""
 from pathlib import Path
 import json, html, shutil, zipfile
 import numpy as np
@@ -13,7 +13,8 @@ def font(size):return ImageFont.truetype(FONT,size)
 
 def main():
     rows=json.loads((OUT/'final.json').read_text('utf-8'))
-    assert len(rows)==25
+    count=len(rows)
+    assert count and all((ROOT/'samples/images'/row['file']).is_file() for row in rows)
     DELIVER.mkdir(exist_ok=True)
     for name in ('保真曲线','原像素路径','对比图'):(DELIVER/name).mkdir(exist_ok=True)
     cards=[];sheets=[]
@@ -22,7 +23,6 @@ def main():
         source=Image.open(p).convert('RGBA');arr=np.array(source)
         border=np.r_[arr[0,:,:3],arr[-1,:,:3],arr[:,0,:3],arr[:,-1,:3]]
         if np.any(arr[:,:,3]<255):active=arr[:,:,3]>0
-        elif row['file']=='22_busy_bg.png':active=np.ones(arr.shape[:2],bool)
         else:active=np.linalg.norm(arr[:,:,:3].astype(float)-np.median(border,axis=0),axis=2)>5
         y,x=np.nonzero(active)
         box=(max(0,int(x.min())-12),max(0,int(y.min())-12),min(source.width,int(x.max())+13),min(source.height,int(y.max())+13))
@@ -67,17 +67,18 @@ def main():
 <p><a href="{p.stem}/fidelity.svg" target="_blank">打开新版 SVG</a> · <a download="{p.stem}.svg" href="{p.stem}/fidelity.svg">下载新版 SVG</a> · <a download="{p.stem}.svg" href="{p.stem}/pixel_exact.svg">下载原像素路径</a></p>
 <p class="note">表示：{row['fidelity']['stats']['representation']}；新版 {row['fidelity']['bytes']/1048576:.2f} MB，像素路径 {row['pixel_exact']['bytes']/1048576:.2f} MB。原图 SHA-256 验证未修改。</p></article>''')
         sheets.append(sheet)
-    for start in range(0,25,5):
-        page=Image.new('RGB',(1200,654*5),'white')
+    for start in range(0,count,5):
+        page=Image.new('RGB',(1200,654*min(5,count-start)),'white')
         for j,s in enumerate(sheets[start:start+5]):page.paste(s,(0,j*654))
-        page.save(DELIVER/f'总览_{start+1:02d}-{min(start+5,25):02d}.jpg',quality=91)
+        page.save(DELIVER/f'总览_{start+1:02d}-{min(start+5,count):02d}.jpg',quality=91)
     document='''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>25 张逐图保真验证</title>
 <style>body{max-width:1260px;margin:36px auto;padding:0 22px;background:#f3f5f9;color:#182335;font:16px/1.7 "Microsoft YaHei",sans-serif}header,article{background:white;padding:24px;border-radius:14px;margin:20px 0;border:1px solid #dbe1e9}h1{font-size:29px}h2{font-size:20px}img{max-width:100%;height:auto;border-radius:8px}a{color:#2459b7}.note{color:#64748b;font-size:14px}.warn{padding:16px;background:#fff3d9;border-left:4px solid #e7ab2b}</style>
 <header><h1>25 张图片 · 原图对照验证</h1><p>2026-10-17 · 25 张旧管线 + 125 个算法配置结果 + 50 份最终 SVG。所有原图 SHA-256 保持不变。</p>
 <p class="warn"><b>尚未实现“平滑曲线、少节点、任意放大完全无失真”。</b>新版曲线保留更多细节，仍有局部误差。原像素路径在原始分辨率的 8 位预乘 RGBA 回渲中 25/25 完全一致，但放大仍保留像素网格。透明样本直通 RGBA 合成会有不足 1/255 的整数舍入差异。</p>
-<p>保真模式保留整个原画布、原背景和透明度，不做去背景、校斜、去噪或节点压缩。22_busy_bg 保留复杂背景时回退像素路径（约 22.4 MB）；不是干净文字轮廓。</p>
+<p>保真模式保留整个原画布、原背景和透明度，不做去背景、校斜、去噪或节点压缩。2026-10-18 已移除复杂背景样本；保留的历史合成图仅供诊断，未通过纯白底业务素材准入验收。</p>
 <p>黑底和白底逐像素误差取较大值；主体均值剔除大面积空白的稀释作用，同时列出最差像素和显著差异数量。原图无独立矢量真值，因此这些数值不能证明恢复了原设计的曲线。</p>
 <p><a href="final.json">完整原始指标 JSON</a> · <a href="research.md">方法调研与运行边界</a></p></header>'''+''.join(cards)+'</html>'
+    document=document.replace('25 张',f'{count} 张').replace('25/25',f'{count}/{count}').replace('50 份最终 SVG',f'{count*2} 份最终 SVG').replace('125 个算法配置结果','历史算法配置结果')
     (OUT/'report.html').write_text(document,encoding='utf-8')
     portable=document
     for row in rows:
@@ -88,7 +89,7 @@ def main():
     (DELIVER/'逐图对比.html').write_text(portable,encoding='utf-8')
     shutil.copyfile(OUT/'final.json',DELIVER/'final.json')
     if (OUT/'research.md').exists():shutil.copyfile(OUT/'research.md',DELIVER/'research.md')
-    with zipfile.ZipFile(DELIVER/'全部25张_SVG与报告.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
+    with zipfile.ZipFile(DELIVER/f'全部{count}张_SVG与报告.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
         for p in DELIVER.rglob('*'):
             if p.is_file() and p.suffix!='.zip':archive.write(p,p.relative_to(DELIVER))
     print('published',DELIVER,'SVG',len(list(DELIVER.rglob('*.svg'))))

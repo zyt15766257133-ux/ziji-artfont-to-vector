@@ -54,6 +54,9 @@ if SAMPLES.exists():
 FIDELITY_RESULTS = ROOT / 'eval' / 'results' / 'full_folder_fidelity'
 if FIDELITY_RESULTS.is_dir():
     app.mount('/fidelity-results', StaticFiles(directory=str(FIDELITY_RESULTS)), name='fidelity-results')
+SOFT_EFFECT_RESULTS = ROOT / 'eval' / 'results' / 'soft_effects'
+if SOFT_EFFECT_RESULTS.is_dir():
+    app.mount('/soft-effects-results', StaticFiles(directory=str(SOFT_EFFECT_RESULTS)), name='soft-effects-results')
 
 # 内置样本转换结果缓存：同一参数重复点示例时直接命中，避免每次等几秒
 _SAMPLE_CACHE: "OrderedDict[str, dict]" = OrderedDict()
@@ -93,19 +96,31 @@ def build_options(
     corner_angle: float | None = None,
     smooth: bool | None = None,
     auto_verify: bool | None = None,
+    spot_matching: bool | None = None,
     spot_colors: str | list[str] | None = None,
+    soft_effects: bool | None = None,
 ) -> VectorizeOptions:
     if preset not in VectorizeOptions.PRESETS or engine not in {'auto','contour','vtracer'}:
         raise HTTPException(status_code=422, detail='未知预设或引擎')
     if isinstance(spot_colors, str):
         spot_colors = [s.strip() for s in spot_colors.split(",") if s.strip()] or None
+    if preset == 'pixel_exact':
+        spot_matching = False
+        spot_colors = None
+    if not spot_matching:
+        spot_colors = None
     opts = VectorizeOptions.from_preset(
         preset, engine=engine, tolerance=tolerance, max_nodes=max_nodes,
         max_colors=max_colors, gradient_levels=gradient_levels,
         filter_speckle=filter_speckle, corner_angle=corner_angle,
-        smooth=smooth, auto_verify=auto_verify, spot_colors=spot_colors,
+        smooth=smooth, auto_verify=auto_verify, spot_matching=bool(spot_matching),
+        spot_colors=spot_colors, soft_effects=soft_effects,
     )
     opts.engine = engine or 'auto'
+    try:
+        opts = opts.resolve_spot_options()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     import math
     if not math.isfinite(opts.tolerance) or opts.tolerance <= 0 or not 50 <= opts.max_nodes <= 500:
         raise HTTPException(status_code=422, detail='容差须为正数，节点上限须在 50～500 之间')
@@ -150,7 +165,7 @@ WARMUP_SAMPLES = [
     "09_stroke.png", "10_gradient.png", "11_3d.png", "12_shadow.png",
     "13_cartoon.png", "14_brush_feibai.png", "15_lianbi.png", "16_gradient_stroke.png",
     "17_inverse.png", "18_transparent.png", "19_multiline.png", "20_metal.png",
-    "21_neon.png", "22_busy_bg.png", "23_holes_dense.png", "24_standard_53.png",
+    "21_neon.png", "23_holes_dense.png", "24_standard_53.png",
     "25_radial.png",
 ]
 
@@ -183,7 +198,7 @@ def presets() -> dict:
     return {
         "presets": [
             {"key": "fidelity", "name": "保真曲线",
-             "desc": "保留细节和原背景，不压缩节点；曲线仍为近似，需检查放大细节"},
+             "desc": "自动去除纯色及浅色纸底；复杂背景会提示去底失败，适用素材保留可编辑柔光"},
             {"key": "pixel_exact", "name": "原像素路径",
              "desc": "用矢量矩形保存原像素；文件可能很大，放大仍保留像素网格"},
             {"key": "quality", "name": "高质量",
@@ -270,15 +285,17 @@ async def create_job(
     corner_angle: float | None = Form(None),
     smooth: bool | None = Form(None),
     auto_verify: bool | None = Form(None),
+    soft_effects: bool = Form(True),
     strict_input: bool = Form(False),
     with_preview: bool = Form(True),
     glyph_count: int | None = Form(None),
+    spot_matching: bool = Form(False),
     spot_colors: str | None = Form(None),
 ) -> JSONResponse:
     name, data = await _read_upload(file)
     opts = build_options(preset, engine, tolerance, max_nodes, max_colors,
                          gradient_levels, filter_speckle, corner_angle, smooth,
-                         auto_verify, spot_colors=spot_colors)
+                         auto_verify, spot_matching=spot_matching, spot_colors=spot_colors, soft_effects=soft_effects)
     m_glyphs, m_text = _manifest_meta(name)
     def operation(progress):
         result = convert_bytes(name, data, opts, with_preview=with_preview,
@@ -325,15 +342,17 @@ async def convert(
     corner_angle: float | None = Form(None),
     smooth: bool | None = Form(None),
     auto_verify: bool | None = Form(None),
+    soft_effects: bool = Form(True),
     strict_input: bool = Form(False),
     with_preview: bool = Form(True),
     glyph_count: int | None = Form(None),
+    spot_matching: bool = Form(False),
     spot_colors: str | None = Form(None),
 ) -> JSONResponse:
     name, data = await _read_upload(file)
     opts = build_options(preset, engine, tolerance, max_nodes, max_colors,
                          gradient_levels, filter_speckle, corner_angle, smooth,
-                         auto_verify, spot_colors=spot_colors)
+                         auto_verify, spot_matching=spot_matching, spot_colors=spot_colors, soft_effects=soft_effects)
     m_glyphs, m_text = _manifest_meta(name)
     try:
         result = await run_in_threadpool(convert_bytes, name, data, opts, with_preview=with_preview,
@@ -362,6 +381,8 @@ async def batch(
     strict_input: bool = Form(False),
     smooth: bool | None = Form(None),
     auto_verify: bool | None = Form(None),
+    soft_effects: bool = Form(True),
+    spot_matching: bool = Form(False),
     spot_colors: str | None = Form(None),
     glyph_count: int | None = Form(None),
 ) -> Response:
@@ -377,7 +398,7 @@ async def batch(
         raise HTTPException(status_code=400, detail="没有收到文件")
     opts = build_options(preset, engine, tolerance, max_nodes, max_colors,
                          gradient_levels, filter_speckle, corner_angle, smooth,
-                         auto_verify, spot_colors=spot_colors)
+                         auto_verify, spot_matching=spot_matching, spot_colors=spot_colors, soft_effects=soft_effects)
     opts.glyph_count = glyph_count
     started = time.perf_counter()
     zip_bytes, results = await run_in_threadpool(batch_convert, payloads, opts, fmt=fmt, strict_input=strict_input)
@@ -460,9 +481,11 @@ def convert_sample(
     corner_angle: float | None = Form(None),
     smooth: bool | None = Form(None),
     auto_verify: bool | None = Form(None),
+    soft_effects: bool = Form(True),
     strict_input: bool = Form(False),
     with_preview: bool = Form(True),
     glyph_count: int | None = Form(None),
+    spot_matching: bool = Form(False),
     spot_colors: str | None = Form(None),
 ) -> JSONResponse:
     path = SAMPLES / Path(name).name
@@ -470,7 +493,7 @@ def convert_sample(
         raise HTTPException(status_code=404, detail="样本不存在")
     opts = build_options(preset, engine, tolerance, max_nodes, max_colors,
                          gradient_levels, filter_speckle, corner_angle, smooth,
-                         auto_verify, spot_colors=spot_colors)
+                         auto_verify, spot_matching=spot_matching, spot_colors=spot_colors, soft_effects=soft_effects)
     cache_key = _sample_cache_key(path.name, opts, strict_input, with_preview, glyph_count)
     cached = _cache_get(cache_key)
     if cached is not None:

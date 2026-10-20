@@ -83,7 +83,7 @@ def convert_bytes(filename: str, data: bytes, options: VectorizeOptions | None =
     glyph_text：原图文字（manifest），用于按字分组的语义命名；
     truth_mask：与输入原图同尺寸的真值字形掩膜，传入时指标额外输出对真值口径。
     """
-    opts = options or VectorizeOptions()
+    opts = (options or VectorizeOptions()).resolve_spot_options()
     overrides = {k: v for k, v in (("glyph_count", glyph_count), ("glyph_text", glyph_text))
                  if v is not None}
     if overrides:
@@ -129,11 +129,18 @@ def convert_bytes(filename: str, data: bytes, options: VectorizeOptions | None =
     _tick("preprocess")
     if opts.mode in {'fidelity', 'pixel_exact'}:
         from .fidelity import convert_source
-        if opts.spot_colors:
-            raise ValueError('保真档保留原色，不支持同时指定替换专色')
-        return convert_source(filename, img, opts, with_preview, progress)
+        result = convert_source(filename, img, opts, with_preview, progress)
+        elapsed = (time.perf_counter() - t0) * 1000
+        result.timings['decode_validate_ms'] = elapsed - result.elapsed_ms
+        result.timings['total_ms'] = elapsed
+        result.timings['scope'] = 'decode validation trace render verification preview included'
+        result.elapsed_ms = elapsed
+        result.metrics['elapsed_ms'] = elapsed
+        return result
     t_preprocess = time.perf_counter()
     prepared = preprocess(img)
+    from .color_analysis import source_colors
+    palette = source_colors(prepared.rgb_raw, np.minimum(prepared.source_rgba[:, :, 3], prepared.mask))
     preprocess_ms = (time.perf_counter() - t_preprocess) * 1000
     q = prepared.quality
     hard_reject = q.severity == "reject" or (strict_input and q.strict_reject)
@@ -170,6 +177,7 @@ def convert_bytes(filename: str, data: bytes, options: VectorizeOptions | None =
                        glyph_count=opts.glyph_count, truth_mask=truth_mask,
                        tolerance=opts.tolerance)
     metrics["format"] = format_check(svg)
+    metrics['source_colors'] = palette
     metrics["input_invalid"] = q.invalid
     metrics["input_invalid_reasons"] = list(q.invalid_reasons)
     metrics["engine"] = stats.get("engine_used", stats.get("engine"))
@@ -197,6 +205,8 @@ def convert_bytes(filename: str, data: bytes, options: VectorizeOptions | None =
     preview_png = encode_png(preview) if preview is not None else None
     preview_ms = (time.perf_counter() - t_preview) * 1000
     warnings.extend(q.warnings)
+    if stats.get('spot_matching', {}).get('enabled'):
+        warnings.append(f"已启用专色匹配：改写 {stats['spot_matching']['matched_layers']} 个纯色图层；渐变保持原样。")
     metrics["assessment"] = assess_result(metrics, q.to_dict(), None, (w, h))
     elapsed = (time.perf_counter() - t0) * 1000
     metrics["elapsed_ms"] = round(elapsed, 1)
@@ -243,7 +253,20 @@ def inspect_bytes(filename: str, data: bytes) -> dict:
     out["size"] = {"width": int(w), "height": int(h), "bytes": len(data)}
     if min(h, w) < MIN_SIDE:
         out["problems"].append(f"分辨率 {w}×{h} 低于 500×500，请更换清晰素材")
-    prepared = preprocess(img)
+    from .background import remove_uniform_background
+    rgba = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA if img.shape[2] == 4 else cv2.COLOR_BGR2RGBA)
+    foreground, out['background_removal'] = remove_uniform_background(rgba)
+    # Inspect the same foreground used by the fidelity conversion. The legacy
+    # border estimator otherwise reads screenshot frames as the background and
+    # can report zero lettering despite successful spatial paper extraction.
+    if out['background_removal']['applied'] or out['background_removal']['reason'] == 'existing_transparency':
+        prepared = preprocess(cv2.cvtColor(foreground, cv2.COLOR_RGBA2BGRA),
+                              deskew=False, denoise=False, enhance=False,
+                              max_side=max(h, w))
+        out['quality_basis'] = 'detected_foreground_native_resolution'
+    else:
+        prepared = preprocess(img)
+        out['quality_basis'] = 'legacy_input_diagnostics'
     q = prepared.quality
     out["quality"] = q.to_dict()
     out["warnings"].extend(q.warnings)

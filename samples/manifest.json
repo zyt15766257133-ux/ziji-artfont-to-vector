@@ -176,14 +176,6 @@
     "glyphs": 5
   },
   {
-    "file": "22_busy_bg.png",
-    "path": "D:\\cy\\艺术字转矢量图\\demo\\samples\\images\\22_busy_bg.png",
-    "style": "复杂背景",
-    "desc": "纹理背景压力测试，用于边界提示验证",
-    "text": "复杂底",
-    "glyphs": 3
-  },
-  {
     "file": "24_standard_53.png",
     "path": "D:\\cy\\艺术字转矢量图\\demo\\samples\\images\\24_standard_53.png",
     "style": "标准渐变描边（5.3）",

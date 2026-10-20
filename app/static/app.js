@@ -80,6 +80,7 @@ const FAIL_TEXT = {
 };
 const STAGE_ORDER = ['preprocess', 'vectorize', 'verify'];
 const STAGE_TEXT = {
+  effects: '拟合光晕与软阴影，并检查局部明暗',
   preprocess: '阶段 1 / 3：预处理 · 去背景、亚像素边缘、倾斜校正',
   vectorize: '阶段 2 / 3：矢量化 · 主色分层、轮廓拟合、节点预算',
   verify: '阶段 3 / 3：复核 · 还原度、内孔、颜色偏差',
@@ -143,16 +144,18 @@ function readParams() {
   const p = { preset: state.preset, engine: 'auto' };
   if (['fidelity', 'pixel_exact'].includes(state.preset)) {
     p.strict_input = !$('#strict_input').classList.contains('off');
+    if (state.preset === 'fidelity') p.soft_effects = !$('#soft_effects').classList.contains('off');
     if ($('#glyph_count').value) p.glyph_count = Number($('#glyph_count').value);
-    return p;
+  } else {
+    PARAM_IDS.forEach((id) => { p[id] = Number($(`#${id}`).value); });
+    p.auto_verify = !$('#auto_verify').classList.contains('off');
+    p.strict_input = !$('#strict_input').classList.contains('off');
+    const glyphs = $('#glyph_count').value;
+    if (glyphs) p.glyph_count = Number(glyphs);
   }
-  PARAM_IDS.forEach((id) => { p[id] = Number($(`#${id}`).value); });
-  p.auto_verify = !$('#auto_verify').classList.contains('off');
-  p.strict_input = !$('#strict_input').classList.contains('off');
-  const glyphs = $('#glyph_count').value;
-  if (glyphs) p.glyph_count = Number(glyphs);
+  p.spot_matching = state.preset !== 'pixel_exact' && !$('#spot_matching').classList.contains('off');
   const spot = $('#spot_colors').value.trim();
-  if (spot) p.spot_colors = spot;
+  if (spot && p.spot_matching) p.spot_colors = spot;
   return p;
 }
 
@@ -181,7 +184,11 @@ function applyPreset(key) {
   if (!table) return;
   state.preset = key;
   const sourceMode = ['fidelity', 'pixel_exact'].includes(key);
-  [...PARAM_IDS, 'auto_verify', 'spot_colors'].forEach((id) => { $(`#${id}`).disabled = sourceMode; });
+  const pixelMode = key === 'pixel_exact';
+  [...PARAM_IDS, 'auto_verify'].forEach((id) => { $(`#${id}`).disabled = sourceMode; });
+  $('#spot_matching').disabled = pixelMode;
+  $('#spot_colors').disabled = pixelMode;
+  $('#soft-effects-row').hidden = key !== 'fidelity';
   Object.entries(table).forEach(([k, v]) => { $(`#${k}`).value = v; });
   syncOutputs();
   renderPresetSummary();
@@ -190,7 +197,8 @@ function applyPreset(key) {
 function renderPresetSummary() {
   const p = readParams();
   if (['fidelity', 'pixel_exact'].includes(p.preset)) {
-    $('#preset-summary').innerHTML = '<span class="pill">保留原背景</span><span class="pill">不压缩节点</span>';
+    $('#preset-summary').innerHTML = `<span class="pill">${p.preset === 'fidelity' ? '纯色 / 浅色纸底自动去底' : '保留原背景'}</span><span class="pill">不强制节点上限</span>`
+      + (p.preset === 'fidelity' ? `<span class="pill">柔光补偿${p.soft_effects ? '开' : '关'}</span>` : '');
     return;
   }
   $('#preset-summary').innerHTML = [
@@ -202,7 +210,7 @@ function renderPresetSummary() {
 
 function paramsEqual(a, b) {
   if (!a || !b) return true;
-  return [...PARAM_IDS, 'preset', 'engine', 'auto_verify', 'strict_input', 'glyph_count', 'spot_colors']
+  return [...PARAM_IDS, 'preset', 'engine', 'auto_verify', 'strict_input', 'soft_effects', 'glyph_count', 'spot_matching', 'spot_colors']
     .every((id) => String(a[id] ?? '') === String(b[id] ?? ''));
 }
 
@@ -219,11 +227,15 @@ function restoreParams() {
   state.preset = state.paramsUsed.preset || state.preset;
   $('#glyph_count').value = state.paramsUsed.glyph_count ?? '';
   $('#spot_colors').value = state.paramsUsed.spot_colors ?? '';
+  $('#spot_matching').classList.toggle('off', !state.paramsUsed.spot_matching);
+  $('#spot_matching').setAttribute('aria-pressed', String(!!state.paramsUsed.spot_matching));
   $$('#preset-group button').forEach((button) => button.classList.toggle('on', button.dataset.preset === state.preset));
   applyPreset(state.preset);
   PARAM_IDS.forEach((id) => { if (state.paramsUsed[id] !== undefined) $(`#${id}`).value = state.paramsUsed[id]; });
   $('#auto_verify').classList.toggle('off', !state.paramsUsed.auto_verify);
   $('#strict_input').classList.toggle('off', !state.paramsUsed.strict_input);
+  $('#soft_effects').classList.toggle('off', state.paramsUsed.soft_effects === false);
+  $('#soft_effects').setAttribute('aria-pressed', String(state.paramsUsed.soft_effects !== false));
   syncOutputs();
   state.stale = false;
   renderPresetSummary();
@@ -313,8 +325,14 @@ function renderVerdict() {
     const fails = resultFailures(m);
     if (m.source_fidelity) {
       tone = 'warn'; ico = '!';
-      title = result.stats?.representation === 'pixel_grid' ? '原像素路径：放大保留像素网格' : '保真曲线：仍为近似结果';
-      body = `原图回渲主体平均误差 ${num(m.source_fidelity.active_mae, 3)}/255，最大误差 ${num(m.source_fidelity.max_error, 2)}/255。${(result.warnings || [])[0] || ''}`;
+      title = result.stats?.algorithm === 'native_ink_coverage' ? '纹理保留：透明像素覆盖路径'
+        : result.stats?.representation === 'pixel_grid' ? '原像素路径：放大保留像素网格' : '保真曲线：仍为近似结果';
+      body = `${m.background_removal?.applied ? '合成回原背景后，' : '原图回渲'}${m.source_fidelity.excluded_background_artifact_pixels ? '排除已清理的背景杂物，' : ''}主体平均误差 ${num(m.source_fidelity.active_mae, 3)}/255，最大误差 ${num(m.source_fidelity.max_error, 2)}/255。${(result.warnings || [])[0] || ''}`;
+      if (['nonuniform_border', 'no_foreground'].includes(m.background_removal?.reason)) {
+        tone = 'bad';
+        title = '自动去背景未成功：结果仍含原背景';
+        body = '当前背景无法可靠分离，请更换干净纯色或透明底素材。';
+      }
     } else if (m.input_invalid) {
       tone = 'bad'; ico = '!';
       title = '建议更换素材';
@@ -409,6 +427,23 @@ function resultFailures(metrics) {
 }
 
 /* ------------------------------------------------------------ 指标 */
+function renderSourceColors(palette) {
+  const colors = (Array.isArray(palette?.colors) ? palette.colors : [])
+    .filter(color => /^#[0-9a-f]{6}$/i.test(color?.hex || '')).slice(0, 8);
+  const note = !palette ? '重新转换后显示原图颜色' : !colors.length ? '未识别到可见颜色'
+    : palette.scope === 'foreground' ? '已排除检测到的背景；渐变与柔边以代表色展示'
+      : '按可见原图取色，可能包含背景颜色；渐变以代表色展示';
+  return `<section class="m source-colors" aria-label="原图主色">
+    <div class="palette-heading"><b>原图主色</b><span>${colors.length ? `${colors.length} 种代表色 · HEX / RGB` : '自动识别'}</span></div>
+    ${colors.length ? `<ul class="palette-list">${colors.map(color => {
+      const hex = color.hex.toUpperCase();
+      const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+      return `<li class="palette-color"><span class="palette-swatch" style="background-color:${hex}" aria-hidden="true"></span>
+        <span><strong>${hex}</strong><small>RGB ${rgb.join(', ')}</small></span></li>`;
+    }).join('')}</ul>` : ''}
+    <p class="palette-note">${note}</p></section>`;
+}
+
 function renderMetrics(data) {
   const m = data.metrics || {};
   const q = data.quality || {};
@@ -430,21 +465,45 @@ function renderMetrics(data) {
   if (m.source_fidelity) {
     const f = m.source_fidelity;
     chips.splice(0, chips.length,
-      { k: '主体平均误差', v: `${num(f.active_mae, 3)}/255`, n: '原图逐像素对照', e: '直接对原始 RGBA 在黑底、白底合成，取较大的误差；不使用处理后的掩膜替代原图' },
+      { k: '主体平均误差', v: `${num(f.active_mae, 3)}/255`, n: f.excluded_background_artifact_pixels ? '排除已清理背景杂物' : m.background_removal?.applied ? '合成回原背景对照' : '原图逐像素对照', e: m.background_removal?.applied ? '将透明结果合成回原底色后对照；主动清除的边框及背景杂物不计作字形损失，此误差不代表透明度真值已验收' : '直接对原始 RGBA 在黑底、白底合成，取较大的误差；不使用处理后的掩膜替代原图' },
       { k: '最大误差', v: `${num(f.max_error, 2)}/255`, n: '单通道最差像素', e: '全图最差像素误差，不能用全图均值掩盖局部细节损失' },
       { k: '明显差异像素', v: f.pixels_over_8, n: '误差 >8/255', e: '任一通道在黑白背景上合成误差大于 8 的像素数量' },
-      { k: 'SVG 锚点', v: m.node_total, n: '未压缩节点', e: '为保留细节，本档不执行单字 500 节点限制' },
-      { k: '表示方式', v: data.stats?.representation === 'pixel_grid' ? '像素网格' : '近似曲线', n: '保留原画布和背景', e: '像素路径不是平滑字形重建；曲线结果仍需放大检查' },
+      { k: 'SVG 锚点', v: m.node_total, n: data.stats?.effect_editing?.follows_body ? '字身与光晕共用路径' : data.stats?.effect_compensation?.selected ? '字身与柔光分层' : '不强制节点上限', e: '本档不强制单字 500 节点；柔光候选仅在局部复核通过后减少色块路径' },
+      { k: '表示方式', v: data.stats?.representation === 'pixel_grid' ? '像素网格' : '近似曲线', n: m.background_removal?.applied ? '已去底 · 透明输出' : data.stats?.preserves_background === false ? '透明背景' : '保留原画布和背景', e: '像素路径不是平滑字形重建；曲线结果仍需放大检查' },
       { k: '转换耗时', v: `${Math.round(data.elapsed_ms)} ms`, n: '含回渲复核', e: '完整服务耗时，不承诺 5 秒内完成' });
+    const backgroundCheck = m.background_removal?.export_verification;
+    if (backgroundCheck) chips.push({ k: '透明底复核', v: backgroundCheck.passed ? '已通过' : '未通过',
+      ok: backgroundCheck.passed, n: '检查实际导出结果',
+      e: '将导出的 SVG 重新渲染，检查检测到的空白区域是否透明、主要笔画是否丢失；柔光按效果范围单独检查。' });
+    const debris = m.background_removal?.removed_artifact_pixels;
+    if (debris) chips.push({ k: '背景杂物', v: '已清理', n: '边框及外围独立杂物',
+      e: '清理与主体分离的截图长边框及外围小杂物，保留附近点画、细笔画和相连光晕；与字身重叠的内容无法据此可靠分离。' });
+    const effect = data.stats?.effect_compensation;
+    if (effect) {
+      chips.push({ k: '柔光补偿', v: effect.selected ? '已采用' : '沿用原流程',
+        n: effect.selected ? `${data.stats.effects.length} 个柔光效果层` : '局部校验后选择',
+        e: '分别检查字身边缘、弱光晕和明暗偏差；不适用或误差未改善时保留原结果' });
+      if (effect.selected) chips.push({ k: '光晕明暗偏差', v: `${num(effect.local.halo_luma_bias, 3)}/255`,
+        n: '正数偏亮，负数偏暗', e: '原图确定的光晕区域内，输出减原图的 sRGB 加权通道均值；不是还原率' });
+      if (effect.selected) chips.push({ k: '柔光编辑',
+        v: data.stats?.effect_editing?.follows_body ? '字身联动' : '独立发光源',
+        n: '兼容 SVG 滤镜',
+        e: data.stats?.effect_editing?.follows_body
+          ? '光晕附着在字身复合路径上；释放复合路径后的效果及其他编辑器仍需核验'
+          : '多发光源独立保留；修改字身节点后需同步调整发光源' });
+    }
   }
+  const spot = data.stats?.spot_matching;
+  if (spot?.enabled) chips.push({ k: '专色匹配', v: `${spot.matched_layers} 个纯色层已改色`,
+    n: 'SVG 渐变层保持原样', e: '按填写的 HEX 色板匹配 RGB 最近色；主动改色会增加与原图的颜色差异。渐变若已被转换为纯色色块，也会按纯色层处理。' });
   $('#metric-strip').innerHTML = chips.map((ch) => `
     <button class="m ${ch.ok === false ? 'warn' : ch.ok ? '' : ''}" type="button">
       <div class="k">${ch.k}</div>
       <div class="v ${ch.ok && ch.ok !== false ? 'ok' : ''}">${ch.v}</div>
       <div class="n">${ch.n}</div>
       <div class="exp" hidden>${ch.e}</div>
-    </button>`).join('');
-  $$('#metric-strip .m').forEach((btn) => btn.addEventListener('click', () => {
+    </button>`).join('') + renderSourceColors(m.source_colors);
+  $$('#metric-strip button.m').forEach((btn) => btn.addEventListener('click', () => {
     const exp = btn.querySelector('.exp');
     exp.hidden = !exp.hidden;
   }));
@@ -529,6 +588,20 @@ function renderInspect(data) {
     { t: `主体占比 ${pct(q.orig_bbox_ratio ?? q.subject_bbox_ratio)}`, ok: (q.orig_bbox_ratio ?? q.subject_bbox_ratio) >= 0.6 },
     { t: q.photo_like ? '疑似照片' : '艺术字素材', ok: !q.photo_like },
   ];
+  if (data.background_removal && state.preset === 'fidelity') {
+    const bg = data.background_removal;
+    const labels = {
+      uniform_background: '可自动去除纯色底',
+      light_paper_background: '可自动去除浅色纸底',
+      shaded_light_paper_background: '可自动去除浅色渐变纸底',
+      existing_transparency: '保留已有透明背景',
+    };
+    flags.unshift({ t: labels[bg.reason] || '背景无法可靠自动去除',
+      ok: bg.applied || bg.reason === 'existing_transparency' });
+    if (!bg.applied && bg.reason !== 'existing_transparency') {
+      $('#check-sub').textContent = '背景无法可靠自动分离，继续转换将保留原背景；建议更换干净素材。';
+    }
+  }
   $('#check-flags').innerHTML = flags
     .map((f) => `<span class="flag ${f.ok ? 'ok' : 'warn'}">${f.ok ? '✓' : '⚠'} ${f.t}</span>`).join('');
   $('#check-card').classList.toggle('ok', !(data.warnings || []).length && q.severity === 'ok');
@@ -585,7 +658,7 @@ function pollJob(jobId) {
 }
 
 function updateLoader(stage, elapsedMs) {
-  const idx = Math.max(0, STAGE_ORDER.indexOf(stage));
+  const idx = Math.max(0, STAGE_ORDER.indexOf(stage === 'effects' ? 'vectorize' : stage));
   state.stage = stage;
   $$('#loader-steps .step').forEach((el, i) => {
     el.classList.toggle('done', i < idx);
@@ -596,7 +669,7 @@ function updateLoader(stage, elapsedMs) {
   if (state.phase === 'converting') {
     $('#verdict-body').textContent = STAGE_TEXT[stage] || '';
     if (['fidelity', 'pixel_exact'].includes(state.preset)) {
-      $('#verdict-body').textContent = ({preprocess:'读取原图', vectorize:'保留原图细节并生成路径', verify:'与原图逐像素比较'})[stage] || '';
+      $('#verdict-body').textContent = ({preprocess:'读取原图', vectorize:'保留原图细节并生成路径', effects:'分离并拟合光晕与软阴影', verify:'与原图逐像素比较'})[stage] || '';
       $$('#loader-steps .step').forEach((el, i) => {
         el.textContent = ['1 读取原图','2 生成保真路径','3 对照原图检查'][i];
       });
@@ -741,6 +814,9 @@ function openHistory(i) {
   };
   state.paramsUsed = it.params;
   PARAM_IDS.forEach((id) => { if (it.params?.[id] !== undefined) $(`#${id}`).value = it.params[id]; });
+  $('#spot_colors').value = it.params?.spot_colors ?? '';
+  $('#spot_matching').classList.toggle('off', !it.params?.spot_matching);
+  $('#spot_matching').setAttribute('aria-pressed', String(!!it.params?.spot_matching));
   syncOutputs();
   state.fileName = it.filename;
   state.stale = false;
@@ -1163,7 +1239,7 @@ function bind() {
     markParamsChanged();
   });
   PARAM_IDS.forEach((id) => $(`#${id}`).addEventListener('input', () => { syncOutputs(); markParamsChanged(); }));
-  ['auto_verify', 'strict_input'].forEach((id) => $(`#${id}`).addEventListener('click', (e) => {
+  ['auto_verify', 'strict_input', 'soft_effects', 'spot_matching'].forEach((id) => $(`#${id}`).addEventListener('click', (e) => {
     const btn = e.currentTarget;
     btn.classList.toggle('off');
     btn.setAttribute('aria-pressed', String(!btn.classList.contains('off')));

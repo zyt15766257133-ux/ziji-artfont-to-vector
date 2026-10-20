@@ -29,6 +29,7 @@ class VectorizeOptions:
     color_precision: int = 6
     filter_speckle: int = 4
     enforce_node_budget: bool = True
+    soft_effects: bool = True       # 保真档：独立拟合光晕／软阴影，局部复核后采用
     transparent_background: bool = True
     posterize: int = 0              # >0 时先做色阶合并，保证渐变分级
     auto_verify: bool = True        # 第三方引擎（vtracer）兜底：自检不达标时对比取优
@@ -38,7 +39,8 @@ class VectorizeOptions:
     preserve_source_gaps: bool = False
     glyph_count: int | None = None  # 真实字数（manifest/用户手填），不传时连通域估算兜底
     glyph_text: str | None = None   # 原图文字（manifest），用于按字分组时的语义命名
-    spot_colors: list[str] | None = None  # 指定专色 HEX，平面色层匹配到专色（≤3% 偏差）
+    spot_matching: bool = False     # 显式开启专色匹配；默认保留原色
+    spot_colors: list[str] | None = None  # 用户指定 HEX 色板，开启后按 RGB 最近色匹配纯色层
     snap_axis: str = "auto"         # 直线/正交吸附：auto（按素材判定）| on | off
     shadow_layers: str = "auto"     # 阴影分层（柔边阴影独立低节点层）：auto | on | off
     shadow_style: str = "soft"      # 阴影风格：soft（软覆盖率半透明层）| steps（实色阶梯，印刷/刻字）
@@ -70,6 +72,12 @@ class VectorizeOptions:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def resolve_spot_options(self) -> "VectorizeOptions":
+        if not self.spot_matching or self.mode == 'pixel_exact':
+            return replace(self, spot_matching=False, spot_colors=None)
+        from .spot_colors import normalize_palette
+        return replace(self, spot_colors=normalize_palette(self.spot_colors))
 
 
 # ---------------------------------------------------------------------------
@@ -879,12 +887,16 @@ def _fit_global_gradient(rgb: np.ndarray, mask: np.ndarray, levels: int,
 
 
 def _match_spot(color_hex: str, spot_colors: list[str],
-                tolerance: float = 0.03) -> tuple[str, str | None]:
-    """专色匹配：图层色与指定专色的通道偏差 ≤3% 时替换为专色值。
+                tolerance: float = 0.03, force: bool = False) -> tuple[str, str | None]:
+    """专色匹配：默认仅替换通道偏差 ≤3% 的图层；显式开启时取最近色板色。
 
     返回 (最终色, 命中的专色或 None)。只作用于平面色层；渐变层保持连续色。
     """
     from .svgutil import hex_to_rgb
+    if force:
+        from .spot_colors import nearest_color, normalize_palette
+        target = nearest_color(color_hex, normalize_palette(spot_colors))
+        return target, target
     c = np.asarray(hex_to_rgb(color_hex), dtype=np.float64)
     best, best_d = None, None
     for spot in spot_colors:
@@ -895,7 +907,7 @@ def _match_spot(color_hex: str, spot_colors: list[str],
         d = float(np.abs(c - s).max()) / 255.0
         if best_d is None or d < best_d:
             best, best_d = spot.lower(), d
-    if best is not None and best_d is not None and best_d <= tolerance:
+    if best is not None and best_d is not None and (force or best_d <= tolerance):
         return best, best
     return color_hex, None
 
@@ -1273,8 +1285,6 @@ def vectorize_contour(prepared: PreparedImage, opts: VectorizeOptions) -> tuple[
                 px = near if len(near) >= 30 else px_all
                 color_hex = rgb_to_hex(px.mean(axis=0)[::-1])
             spot_hit = None
-            if opts.spot_colors:
-                color_hex, spot_hit = _match_spot(color_hex, opts.spot_colors)
 
             gradient = None
             if area / max(1.0, fg_area) > 0.35 and opts.gradient_levels >= 8:
@@ -1559,7 +1569,7 @@ def vectorize(prepared: PreparedImage, opts: VectorizeOptions) -> tuple[SvgDocum
     from .metrics import quick_shape_iou
     from .svgutil import assign_glyph_groups
 
-    opts, profile = resolve_profile(prepared, opts)
+    opts, profile = resolve_profile(prepared, opts.resolve_spot_options())
     engine = choose_engine(prepared, opts)
     if engine == 'contour':
         from .direct import monochrome_document
@@ -1645,6 +1655,31 @@ def vectorize(prepared: PreparedImage, opts: VectorizeOptions) -> tuple[SvgDocum
     stats["engine_selected"] = engine
     stats["engine_used"] = stats.get("engine")
     stats["profile"] = profile
+
+    # Match after engine selection so contour and VTracer share the same branch.
+    # Matching is intentional recoloring and must not affect source-fit selection.
+    if opts.spot_matching:
+        from .spot_colors import nearest_color
+        changed = 0
+        mappings = {}
+        for layer in doc.layers:
+            if layer.gradient:
+                continue
+            source = layer.color
+            target = nearest_color(source, opts.spot_colors)
+            layer.color = target
+            if target != source:
+                changed += 1
+                mappings[source, target] = mappings.get((source, target), 0) + 1
+        details = stats.get('layer_detail', [])
+        if len(details) == len(doc.layers):
+            for layer, detail in zip(doc.layers, details):
+                detail.update(color=layer.color, spot=None if layer.gradient else layer.color)
+        stats['spot_matching'] = {
+            'enabled': True, 'matched_layers': changed, 'palette': opts.spot_colors,
+            'gradients_unchanged': True,
+            'mapping_counts': [{'from': a, 'to': b, 'layers': n} for (a, b), n in sorted(mappings.items())],
+        }
 
     # 按字分组：每字一个 <g>，内含该字的全部颜色子层（需求 5.2 / 六节输出模板）
     glyphs = int(opts.glyph_count or doc.metadata.get("glyphs")

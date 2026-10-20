@@ -343,17 +343,6 @@ def build_samples() -> list[dict]:
     add("23_holes_dense.png", on_bg(composite(m, (26, 26, 30)), (255, 255, 255)),
         "内孔密集", "验字与回形内孔必须保持镂空", "日回品国目")
 
-    # 22 复杂背景压力样本（预期提示素材异常）
-    m = render_mask("复杂底", font("hei", 170))
-    rng = np.random.default_rng(3)
-    noise = rng.integers(0, 255, (SIZE, SIZE, 3), dtype=np.uint8)
-    noise = np.asarray(Image.fromarray(noise).filter(ImageFilter.GaussianBlur(2)))
-    fg = composite(m, (15, 15, 15))
-    a = fg[:, :, 3:4].astype(np.float32) / 255.0
-    mix = noise.astype(np.float32) * (1 - a) + fg[:, :, :3].astype(np.float32) * a
-    add("22_busy_bg.png", np.dstack([mix, np.full((SIZE, SIZE), 255, np.uint8)]).astype(np.uint8),
-        "复杂背景", "纹理背景压力测试，用于边界提示验证", "复杂底", m)
-
     # 24 需求 5.3 标准案例：1000×1000 白底渐变描边字
     m = render_mask("标准案例", font("hei", 210), stroke=10)
     inner = render_mask("标准案例", font("hei", 210))

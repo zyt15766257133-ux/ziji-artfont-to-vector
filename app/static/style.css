@@ -165,7 +165,13 @@ input[type=text],input[type=number]{width:100%;border:1px solid var(--line);bord
 .cmp{position:relative;border-radius:14px;overflow:hidden;background:transparent;box-shadow:0 10px 30px rgba(22,25,34,.12);
   width:var(--view-w,600px);max-width:100%;aspect-ratio:var(--view-ar,1);user-select:none;touch-action:none}
 .cmp img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
-.cmp .clip{position:absolute;top:0;bottom:0;left:0;width:var(--wipe,50%);overflow:hidden}
+.cmp .clip{position:absolute;top:0;bottom:0;left:0;width:var(--wipe,50%);overflow:hidden;
+  background-color:#F7F8FA;
+  background-image:linear-gradient(45deg,#E9ECF1 25%,transparent 25%,transparent 75%,#E9ECF1 75%),
+                   linear-gradient(45deg,#E9ECF1 25%,transparent 25%,transparent 75%,#E9ECF1 75%);
+  background-size:22px 22px;background-position:0 0,11px 11px}
+.canvas.bg-light .cmp .clip{background:#fff}
+.canvas.bg-dark .cmp .clip{background:#16181D}
 .cmp .clip img{width:var(--view-w,600px);max-width:none;height:100%}
 .cmp .barline{position:absolute;top:0;bottom:0;left:var(--wipe,50%);width:2px;background:#fff;box-shadow:0 0 0 1px rgba(22,25,34,.28)}
 .cmp .handle{position:absolute;top:50%;left:var(--wipe,50%);transform:translate(-50%,-50%);width:42px;height:42px;
@@ -202,6 +208,16 @@ input[type=text],input[type=number]{width:100%;border:1px solid var(--line);bord
 .m .exp{font-size:11px;color:var(--sub);line-height:1.7;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .m.warn{background:#FDF6E8} .m.warn .v{color:var(--warn)}
 .m.dim{opacity:.45}
+.source-colors{grid-column:1/-1;min-width:0;cursor:default}
+.palette-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.palette-heading b{font-size:13px}
+.palette-heading>span,.palette-note{font-size:11px;color:var(--faint)}
+.palette-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;list-style:none;padding:0;margin:12px 0}
+.palette-color{display:flex;align-items:center;gap:10px;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+.palette-swatch{display:block;flex:0 0 32px;height:32px;border-radius:8px;border:1px solid rgba(0,0,0,.12)}
+.palette-color strong{display:block;font:600 13px/1.5 Consolas,monospace}
+.palette-color small{display:block;font-size:11px;color:var(--sub);white-space:nowrap}
+.palette-note{margin:4px 0 0;line-height:1.6}
 
 /* 动作条 */
 .actions{display:flex;align-items:center;gap:10px;padding:14px 18px;flex-wrap:wrap}

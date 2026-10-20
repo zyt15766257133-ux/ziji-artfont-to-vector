@@ -1,0 +1,53 @@
+{
+  "retrieved_utc": "2026-10-18T11:11:03.842848+00:00",
+  "sources": [
+    {
+      "id": "vtracer",
+      "url": "https://raw.githubusercontent.com/visioncortex/vtracer/master/README.md",
+      "final_url": "https://raw.githubusercontent.com/visioncortex/vtracer/master/README.md",
+      "characters": 11864,
+      "ok": true
+    },
+    {
+      "id": "vtracer-source",
+      "url": "https://raw.githubusercontent.com/visioncortex/vtracer/master/crates/vtracer/src/pipeline.rs",
+      "final_url": "https://raw.githubusercontent.com/visioncortex/vtracer/master/crates/vtracer/src/pipeline.rs",
+      "characters": 5647,
+      "ok": true
+    },
+    {
+      "id": "gimp",
+      "url": "https://docs.gimp.org/3.0/en/gimp-filter-color-to-alpha.html",
+      "final_url": "https://docs.gimp.org/3.0/en/gimp-filter-color-to-alpha.html",
+      "characters": 5608,
+      "ok": true
+    },
+    {
+      "id": "imagemagick",
+      "url": "https://usage.imagemagick.org/masking/",
+      "final_url": "https://usage.imagemagick.org/masking/",
+      "characters": 88611,
+      "ok": true
+    },
+    {
+      "id": "vectorizer-ai",
+      "url": "https://vectorizer.ai/",
+      "final_url": "https://vectorizer.ai/",
+      "characters": 14642,
+      "ok": true
+    },
+    {
+      "id": "vectormagic",
+      "url": "https://vectormagic.com/support/tutorials/basic",
+      "final_url": "https://vectormagic.com/support/tutorials/how-to-use-vector-magic",
+      "characters": 15060,
+      "ok": true
+    },
+    {
+      "id": "inkscape",
+      "url": "https://inkscape.org/doc/tutorials/tracing/tutorial-tracing.html",
+      "ok": false,
+      "error": "The read operation timed out"
+    }
+  ]
+}

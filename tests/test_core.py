@@ -104,6 +104,7 @@ def test_spot_match():
     assert _match_spot("#1a1a1a", ["#191919"]) == ("#191919", "#191919")
     color, hit = _match_spot("#ff0000", ["#191919"])
     assert hit is None and color == "#ff0000"
+    assert _match_spot("#ff0000", ["#191919"], force=True) == ("#191919", "#191919")
 
 
 def test_redundant_anchor_ratio():

@@ -1,7 +1,8 @@
-"""Source-preserving tracing and an explicitly pixel-based vector archive.
+"""Foreground tracing and an explicitly pixel-based source archive.
 
-No background removal, deskew, denoise, colour pruning or node-budget refit is
-allowed here. Pixel-exact is a grid representation, not recovered font curves.
+Curve output removes uniform backgrounds without deskew or denoise. Soft-effect
+candidates pass source and regional gates before replacing color patches.
+Pixel-exact remains an unmodified grid archive, not recovered font curves.
 """
 from __future__ import annotations
 import importlib.util
@@ -17,9 +18,56 @@ import numpy as np
 from PIL import Image
 
 from .native_render import render_svg
+from .background import PAPER_BACKGROUNDS, background_canvas
 
 _LOAD_LOCK = threading.Lock()
 _NEW_ENGINE = None
+
+
+def apply_spot_colors(svg: str, spot_colors: list[str]) -> tuple[str, dict]:
+    """Map solid SVG fills to the nearest user-selected spot color.
+
+    This is an explicit opt-in post-process. Gradient definitions and backdrop
+    groups remain untouched so the branch changes only flat color layers.
+    """
+    import xml.etree.ElementTree as ET
+    from .spot_colors import nearest_color, normalize_hex, normalize_palette
+
+    palette = normalize_palette(spot_colors)
+
+    root = ET.fromstring(svg)
+    if root.tag.startswith('{http://www.w3.org/2000/svg}'):
+        ET.register_namespace('', 'http://www.w3.org/2000/svg')
+    changed = 0
+    mapping_counts: dict[tuple[str, str], int] = {}
+
+    def walk(node, excluded: bool = False):
+        nonlocal changed
+        marker = node.get('data-name', '')
+        skip = excluded or marker in {'原背景', '原图背景'}
+        if not skip:
+            fill = normalize_hex(node.get('fill', ''))
+            if fill:
+                target = nearest_color(fill, palette)
+                if target != fill:
+                    node.set('fill', target)
+                    changed += 1
+                    key = (fill, target)
+                    mapping_counts[key] = mapping_counts.get(key, 0) + 1
+        for child in list(node):
+            walk(child, skip)
+
+    walk(root)
+    return ET.tostring(root, encoding='unicode'), {
+        'enabled': True,
+        'matched_layers': changed,
+        'palette': palette,
+        'mapping_counts': [
+            {'from': source, 'to': target, 'layers': count}
+            for (source, target), count in sorted(mapping_counts.items())
+        ],
+        'gradients_unchanged': True,
+    }
 
 
 def load_engine():
@@ -133,11 +181,15 @@ def pixel_paths(source):
                 'layers':len(groups),'representation':'pixel_grid','preserves_background':True}
 
 
-def trace_curves(source, progress=None):
+def trace_curves(source, progress=None, *, soft_effects=True):
+    started = time.perf_counter()
     # A textured raster can contain hundreds of thousands of tiny colour
     # regions. Preserve its samples explicitly instead of pretending that a
     # compact font outline represents the background faithfully.
-    if len(np.unique(source.reshape(-1,4),axis=0))>65536:
+    # A contiguous RGBA uint8 pixel is exactly one uint32 key. Sorting these
+    # keys preserves the previous distinct-color decision without the costly
+    # structured four-column sort (including RGB hidden under zero alpha).
+    if len(np.unique(np.ascontiguousarray(source).view(np.uint32)))>65536:
         svg,stats=pixel_paths(source)
         stats['fallback_reason']='dense_source_colors; retained entire background as pixel paths'
         pixels=render_svg(svg)
@@ -215,14 +267,67 @@ def trace_curves(source, progress=None):
            'node_budget_applied':False,'candidate_errors':[{**r,'algorithm':m} for _,_,r,m in candidates],
            'node_total':sum(count_nodes_from_d(path.get('d','')) for path in paths),
            'layers':len(paths)}
+    baseline_ms = (time.perf_counter()-started)*1000
+    if soft_effects:
+        from .soft_effects import soft_effect_candidate, compare_effect_candidate
+        if progress: progress('effects')
+        try:
+            candidate, diagnostic = soft_effect_candidate(source)
+        except (ValueError, ArithmeticError, cv2.error) as exc:
+            # A failed optional fit must not discard an already verified trace.
+            # Cancellation and programming errors are deliberately not swallowed.
+            candidate = None
+            diagnostic = {'attempted': True, 'selected': False,
+                          'reason': 'numerical_fit_failed', 'detail': str(exc)}
+        if candidate is not None:
+            candidate_report = source_error(source, candidate[1])
+            comparison = compare_effect_candidate(source, pixels, report, candidate, candidate_report)
+            diagnostic['comparison'] = comparison
+            diagnostic['candidate_source_error'] = candidate_report
+            diagnostic['baseline_source_error'] = report
+            diagnostic['baseline_nodes'] = stats['node_total']
+            diagnostic['candidate_nodes'] = candidate[2]['node_total']
+            if candidate[2]['node_total'] >= stats['node_total']:
+                comparison['rejected'].append('no_complexity_reduction')
+            if not comparison['rejected']:
+                diagnostic['selected'] = True
+                diagnostic['reason'] = 'source_and_local_gates_passed'
+                old_stats = stats
+                svg, pixels, stats = candidate[:3]
+                stats['candidate_errors'] = old_stats['candidate_errors'] + [
+                    {**candidate_report, 'algorithm': stats['algorithm']}]
+                report = candidate_report
+            else:
+                diagnostic['reason'] = 'baseline_comparison_rejected'
+        stats['effect_compensation'] = diagnostic
+    stats['timings_ms'] = {'baseline_trace_and_verify': baseline_ms,
+                           'effects_and_comparison': (time.perf_counter()-started)*1000-baseline_ms,
+                           'trace_effects_and_verify': (time.perf_counter()-started)*1000}
     return svg,pixels,stats,report
 
 
 def convert_source(filename, image, options, with_preview=True, progress=None):
     from .service import ConvertResult
     from .metrics import format_check
+    options = options.resolve_spot_options()
     started=time.perf_counter()
     source=cv2.cvtColor(image,cv2.COLOR_BGRA2RGBA if image.shape[2]==4 else cv2.COLOR_BGR2RGBA)
+    removal = {'applied': False, 'reason': 'pixel_archive'}
+    if options.mode != 'pixel_exact' and options.transparent_background:
+        from .background import remove_uniform_background
+        foreground, removal = remove_uniform_background(source)
+    from .color_analysis import source_colors
+    foreground_known = removal['applied'] or removal['reason'] == 'existing_transparency'
+    palette = source_colors(source[:, :, :3], foreground[:, :, 3] if foreground_known else source[:, :, 3],
+                            scope='foreground' if foreground_known or np.any(source[:, :, 3] < 255) else 'visible_image')
+    trace_source = source
+    if removal.get('removed_artifact_pixels', 0):
+        # Do not ask the tracer/soft-effect fitter to rediscover discarded
+        # screenshot frames and badges. Preserve the input for its preview.
+        trace_source = source.copy()
+        blank = foreground[:, :, 3] == 0
+        matte = np.rint(background_canvas(removal, source.shape[:2])).astype('uint8')
+        trace_source[blank, :3] = matte[blank]
     if progress: progress('vectorize')
     if options.mode=='pixel_exact':
         svg,stats=pixel_paths(source)
@@ -233,20 +338,142 @@ def convert_source(filename, image, options, with_preview=True, progress=None):
         # premultiplication unit. This covers low-alpha unpremultiplication.
         if report['premultiplied_max_error']>1:
             raise ValueError('原像素路径回渲校验失败，不能标记为保真输出')
+    elif removal['reason'] in PAPER_BACKGROUNDS:
+        svg, stats = pixel_paths(foreground)
+        stats.update(engine='fidelity_foreground_pixels', algorithm='native_ink_coverage',
+                     fallback_reason='paper_grain_and_fine_tonal_texture; preserve native coverage')
+        pixels = render_svg(svg)
     else:
-        svg,pixels,stats,report=trace_curves(source,progress)
+        svg,pixels,stats,report=trace_curves(trace_source,progress,soft_effects=options.soft_effects)
+        if options.transparent_background:
+            if removal['applied']:
+                if stats.get('effect_compensation', {}).get('selected'):
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(svg)
+                    backing = [child for child in root if child.get('data-name') == '原背景']
+                    if not backing:
+                        raise ValueError('柔光去底失败：未找到独立背景层')
+                    for child in backing:
+                        root.remove(child)
+                    svg = ET.tostring(root, encoding='unicode')
+                    pixels = render_svg(svg)
+                    stats['node_total'] -= 4
+                    stats['layers'] -= 1
+                    removal['method'] = 'verified_soft_effects_without_backdrop'
+                else:
+                    from .background import remove_traced_background
+                    svg = remove_traced_background(svg, trace_source, foreground)
+                    pixels = render_svg(svg)
+                    import xml.etree.ElementTree as ET
+                    from .svgutil import count_nodes_from_d
+                    paths = [node for node in ET.fromstring(svg).iter() if node.tag.rsplit('}', 1)[-1]=='path']
+                    stats['node_total'] = sum(count_nodes_from_d(node.get('d', '')) for node in paths)
+                    stats['layers'] = len(paths)
+            else:
+                stats['background_removal'] = removal
+                if removal['reason'] == 'existing_transparency':
+                    stats['preserves_background'] = False
+    if removal['applied']:
+        from .background import verify_foreground_export
+        effect_diagnostic = stats.get('effect_compensation')
+        verified_effects = stats.get('effects') if (effect_diagnostic or {}).get('selected') else None
+        verification = verify_foreground_export(foreground, pixels, verified_effects=verified_effects)
+        # A palette-only SVG edit is not sufficient proof of removal: a tracer
+        # can approximate the matte with a color absent from the input palette.
+        # Retry from actual RGBA foreground, so spatial alpha drives tracing.
+        if not verification['passed']:
+            initial_verification = verification
+            svg, pixels, stats, _ = trace_curves(foreground, progress, soft_effects=False)
+            verification = verify_foreground_export(foreground, pixels)
+            foreground_error = source_error(foreground, pixels)
+            if not verification['passed'] or foreground_error['active_mae'] > 4:
+                # Preserve native coverage when curves cannot pass the gate.
+                # This is explicitly labelled pixel geometry, never smooth
+                # outline recovery, and contains no embedded raster image.
+                svg, stats = pixel_paths(foreground)
+                pixels = render_svg(svg)
+                stats.update(engine='fidelity_foreground_pixels',
+                             fallback_reason='foreground_curve_verification_failed; preserve native coverage')
+                verification = verify_foreground_export(foreground, pixels)
+            stats['foreground_retry'] = {'initial_verification': initial_verification,
+                                          'reason': 'traced_background_or_missing_foreground'}
+            if effect_diagnostic is not None:
+                stats['effect_compensation'] = {**effect_diagnostic, 'selected': False}
+        if not verification['passed']:
+            raise ValueError('SVG 透明背景回渲校验失败，不能交付为去底成功结果')
+        removal['export_verification'] = verification
+        stats['preserves_background'] = False
+        removal['transparent_pixels'] = int((pixels[:, :, 3] == 0).sum())
+        stats['background_removal'] = removal
+        # Removing the matte intentionally changes alpha. Judge color and
+        # geometry by compositing the result onto the estimated original bg.
+        opacity = pixels[:, :, 3:4].astype(float)/255
+        reconstructed = np.empty_like(pixels)
+        reconstructed[:, :, :3] = np.rint(pixels[:, :, :3]*opacity+
+            background_canvas(removal, source.shape[:2])*(1-opacity)).astype('uint8')
+        reconstructed[:, :, 3] = 255
+        report = source_error(trace_source, reconstructed)
+        report['scope'] = 'output composited on original background; native resolution; alpha removal intentional'
+        if removal.get('removed_artifact_pixels', 0):
+            report['scope'] += '; detected background artifacts intentionally excluded'
+            report['excluded_background_artifact_pixels'] = removal['removed_artifact_pixels']
     h,w=source.shape[:2]
-    warnings=(['原像素路径保留像素网格，放大仍有锯齿；不等于恢复平滑字形。']
+    warnings=(['像素覆盖路径保留原分辨率纹理，放大仍有像素网格；不等于恢复平滑字形。']
               if stats['representation']=='pixel_grid' else
               ['曲线结果仍为近似，请检查放大细节；未承诺无失真或单字节点上限。'])
-    warnings.append('此档保留原背景、原画布及透明度；不执行去背景、校斜或去噪。')
-    metrics={'source_fidelity':report,'engine':stats['engine'],'node_total':stats['node_total'],
+    if removal['reason'] in PAPER_BACKGROUNDS:
+        warnings.append('已去除浅色纸底颗粒，按原分辨率保存文字灰度与柔边；未锐化或重绘，放大仍有像素网格，节点预算未验收。')
+        if removal['reason'] == 'shaded_light_paper_background':
+            warnings.append('已按空间底色模型去除浅色渐变纸底及连续截图黑边。')
+    elif removal['applied']:
+        warnings.append('已自动去除纯色背景，输出透明底；保留原画布，不执行校斜。')
+    elif removal['reason'] == 'existing_transparency':
+        warnings.append('保留输入的透明背景；不执行校斜或去噪。')
+    elif removal['reason'] == 'nonuniform_border':
+        warnings.append('边缘背景不均匀，未自动去底；请更换干净纯色背景素材。')
+    else:
+        warnings.append('原像素路径保留原背景和透明度；不执行去背景、校斜或去噪。' if options.mode=='pixel_exact'
+                        else '未检测到可去除的纯色背景；保留原画布。')
+    if removal.get('removed_artifact_pixels', 0):
+        warnings.append('已清理与字身分离的截图边框和外围杂物；相连笔画、附近点画及光晕予以保留。')
+    if options.spot_matching and options.spot_colors:
+        svg, spot_info = apply_spot_colors(svg, options.spot_colors)
+        pixels = render_svg(svg)
+        stats['spot_matching'] = spot_info
+        warnings.append(f"已启用专色匹配：改写 {spot_info['matched_layers']} 个纯色图层；渐变保持原样。")
+        if removal['applied']:
+            opacity = pixels[:, :, 3:4].astype(float) / 255
+            reconstructed = np.empty_like(pixels)
+            reconstructed[:, :, :3] = np.rint(
+                pixels[:, :, :3] * opacity + background_canvas(removal, source.shape[:2]) * (1 - opacity)
+            ).astype('uint8')
+            reconstructed[:, :, 3] = 255
+            report = source_error(trace_source, reconstructed)
+            report['scope'] = 'output composited on original background; native resolution; alpha removal intentional'
+        else:
+            report = source_error(trace_source, pixels)
+        report['intentional_recoloring'] = True
+        if removal.get('removed_artifact_pixels', 0):
+            report['scope'] += '; detected background artifacts intentionally excluded'
+            report['excluded_background_artifact_pixels'] = removal['removed_artifact_pixels']
+    trace_ms = (time.perf_counter()-started)*1000
+    if stats.get('effect_compensation', {}).get('selected'):
+        warnings.append('柔光采用可编辑 SVG 滤镜；PDF/AI 导出会近似展开，EPS 不支持这些透明效果。')
+        if stats.get('effect_editing', {}).get('follows_body'):
+            warnings.append('柔光附着在字身复合路径上，修改字身可联动；释放复合路径后的效果未验收。')
+        else:
+            warnings.append('多发光源独立保留，修改字身节点后需同步调整发光源；跨编辑器效果仍需核验。')
+    background_failed = removal['reason'] in {'nonuniform_border', 'no_foreground'}
+    if background_failed:
+        warnings.insert(0, '自动去背景未成功，当前结果仍含原背景；请更换干净素材。')
+    metrics={'source_colors':palette,'source_fidelity':report,'engine':stats['engine'],'node_total':stats['node_total'],
              'node_per_glyph':stats['node_total']/options.glyph_count if options.glyph_count else None,
              'glyph_count':options.glyph_count,'glyph_source':'provided' if options.glyph_count else 'unknown',
              'format':format_check(svg),'checks_scope':'original_source_native_grid',
              'checks':{'passed':False},
              'assessment':{'status':'untested','scope':'source_fidelity',
                 'items':{'smooth_lossless':{'label':'任意放大无失真平滑字形','status':'untested','value':None}}},
+             'background_removal': removal,
              'source_transform':{'input_shape':[h,w],'canvas_shape':[h,w],'rotation':None,'crop_box':None}}
     def encode(p):
         buf=io.BytesIO();Image.fromarray(p).save(buf,format='PNG');return buf.getvalue()
@@ -271,7 +498,10 @@ def convert_source(filename, image, options, with_preview=True, progress=None):
     elapsed=(time.perf_counter()-started)*1000
     metrics['elapsed_ms']=elapsed
     return ConvertResult(filename,Path(filename.replace('\\','/')).stem,svg,metrics,
-                         {'width':w,'height':h,'severity':'ok','invalid':False,'passed':True,
-                          'warnings':warnings,'scope':'source_preservation; no material rejection'},stats,
+                          {'width':w,'height':h,'severity':'warning' if removal['reason'] in PAPER_BACKGROUNDS or background_failed else 'ok','invalid':background_failed,'passed':not background_failed,
+                           'invalid_reasons':['background_removal_failed'] if background_failed else [],
+                           'warnings':warnings,'scope':'uniform_background_removal' if removal['applied'] else 'source_preservation; no material rejection'},stats,
                          {'width':w,'height':h},elapsed,warnings,preview_png,source_png,
-                         timings={'total_ms':elapsed,'scope':'decode excluded; trace render verification preview included'})
+                         timings={'total_ms':elapsed, 'trace_verify_ms':trace_ms,
+                                  'preview_and_metadata_ms':elapsed-trace_ms,
+                                  'scope':'trace render verification preview included; caller adds decode'})

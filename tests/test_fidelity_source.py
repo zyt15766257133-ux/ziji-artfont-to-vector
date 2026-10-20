@@ -8,7 +8,7 @@ from PIL import Image
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.pipeline.fidelity import pixel_paths, source_error
+from app.pipeline.fidelity import apply_spot_colors, pixel_paths, source_error
 from app.pipeline.native_render import render_svg
 from app.pipeline.service import convert_bytes
 from app.pipeline.vectorize import VectorizeOptions, vectorize_bytes
@@ -37,6 +37,20 @@ def test_flat_opaque_image_is_one_rectangle_and_exact():
     svg,stats=pixel_paths(source)
     assert stats['rectangles']==1
     np.testing.assert_array_equal(render_svg(svg),source)
+
+
+def test_spot_matching_is_opt_in_and_leaves_gradients_and_backdrop_alone():
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">'
+           '<defs><linearGradient id="g"><stop offset="0" stop-color="#ff0000"/>'
+           '<stop offset="1" stop-color="#0000ff"/></linearGradient></defs>'
+           '<g data-name="原背景" fill="#ffffff"><path d="M0 0H20V20H0Z"/></g>'
+           '<g fill="#f02020"><path d="M2 2H8V8H2Z"/></g>'
+           '<g fill="url(#g)"><path d="M10 10H18V18H10Z"/></g></svg>')
+    out, info = apply_spot_colors(svg, ['#00ff00'])
+    assert info['matched_layers'] == 1
+    assert 'fill="#00ff00"' in out
+    assert 'data-name="原背景" fill="#ffffff"' in out
+    assert 'stop-color="#ff0000"' in out and 'stop-color="#0000ff"' in out
 
 
 def test_metric_cannot_hide_opacity_or_local_errors_in_large_blank_canvas():

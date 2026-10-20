@@ -12,6 +12,33 @@ NS = 'http://www.w3.org/2000/svg'
 def expand_filters(svg: str, levels=16) -> str:
     root = ET.fromstring(svg)
     ET.register_namespace('', NS)
+    # Separate our linked source+shadow into a shadow-only layer and the body.
+    # Otherwise the solid body is incorrectly quantized as part of the halo.
+    filters = {n.get('id'): n for n in root.iter() if n.tag == f'{{{NS}}}filter'}
+    for container in list(root.iter()):
+        for node in list(container):
+            ref = node.get('filter', '')
+            definition = filters.get(ref[5:-1]) if ref.startswith('url(#') and ref.endswith(')') else None
+            if (node.get('id') != 'lettering-compound' or definition is None
+                    or not any(n.tag == f'{{{NS}}}feMergeNode' and n.get('in') == 'SourceGraphic'
+                               for n in definition.iter())):
+                continue
+            shadow_filter = deepcopy(definition)
+            shadow_id = definition.get('id')+'-shadow-only'
+            shadow_filter.set('id', shadow_id)
+            for child in list(shadow_filter):
+                if child.tag == f'{{{NS}}}feMerge':
+                    shadow_filter.remove(child)
+            root.find(f'{{{NS}}}defs').append(shadow_filter)
+            shadow, body = deepcopy(node), deepcopy(node)
+            shadow.set('filter', f'url(#{shadow_id})')
+            shadow.set('id', 'export-shadow-source')
+            body.attrib.pop('filter')
+            wrapper = ET.Element(f'{{{NS}}}g')
+            wrapper.extend([shadow, body])
+            index = list(container).index(node)
+            container.remove(node)
+            container.insert(index, wrapper)
     parent = {child: node for node in root.iter() for child in node}
     filtered = [node for node in root.iter() if node.get('filter')]
     for node in filtered:
@@ -22,7 +49,14 @@ def expand_filters(svg: str, levels=16) -> str:
         for child in root:
             if child.tag.rsplit('}',1)[-1] == 'defs':
                 single.append(deepcopy(child))
-        single.append(deepcopy(node))
+        detached = deepcopy(node)
+        for key in ('fill', 'fill-rule', 'stroke'):
+            if key not in detached.attrib:
+                for ancestor in _ancestors(node, parent):
+                    if key in ancestor.attrib:
+                        detached.set(key, ancestor.get(key))
+                        break
+        single.append(detached)
         pixels = render_svg(ET.tostring(single, encoding='unicode'))
         alpha = pixels[:, :, 3].astype(float)/255
         visible = alpha > .005

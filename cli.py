@@ -40,7 +40,9 @@ def build_options(args) -> VectorizeOptions:
         max_nodes=getattr(args, "max_nodes", None),
         max_colors=getattr(args, "max_colors", None),
         gradient_levels=getattr(args, "gradient_levels", None),
+        soft_effects=not getattr(args, "no_soft_effects", False),
         glyph_count=getattr(args, "glyphs", None),
+        spot_matching=bool(getattr(args, "spot", None)),
         spot_colors=([s.strip() for s in args.spot.split(",") if s.strip()]
                      if getattr(args, "spot", None) else None),
     )
@@ -200,9 +202,10 @@ def main(argv=None) -> int:
     common.add_argument("--glyphs", type=int, default=None,
                         help="真实字数（默认连通域估算，建议手填或用 manifest）")
     common.add_argument("--spot", default=None,
-                        help="专色 HEX，逗号分隔；平面色层偏差 ≤3%% 时匹配到专色")
+                        help="启用专色匹配：HEX 色板，英文逗号分隔；纯色层匹配最近色，渐变保持原样")
     common.add_argument("--format", default="svg", choices=["svg", "pdf", "eps", "ai"])
     common.add_argument("--no-preview", action="store_true")
+    common.add_argument("--no-soft-effects", action="store_true", help="关闭保真档柔光补偿，便于同图对照")
 
     p1 = sub.add_parser("convert", parents=[common], help="单张转换")
     p1.add_argument("input")
