@@ -9,7 +9,7 @@ const { Resvg } = require('./tools/node_modules/@resvg/resvg-js');
 
 const root = path.resolve(__dirname, '..');
 const out = path.resolve(root, '../UI改版验证_2026-10-20');
-const fixture = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="512"><rect width="640" height="512" fill="white"/><path fill="#DC1E32" d="M80 65H285V447H80ZM120 110V400H245V110Z" fill-rule="evenodd"/><path fill="#1941CD" d="M355 65H560V447H355ZM395 110V400H520V110Z" fill-rule="evenodd"/></svg>';
+const fixture = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="512"><rect width="640" height="512" fill="white"/><path fill="#DC1E32" d="M80 40H285V472H80ZM120 85V427H245V85Z" fill-rule="evenodd"/><path fill="#1941CD" d="M355 40H560V472H355ZM395 85V427H520V85Z" fill-rule="evenodd"/></svg>';
 
 function pixels(svg) {
   const rendered = new Resvg(svg).render();
@@ -39,6 +39,11 @@ function pixels(svg) {
     assert.equal(await page.locator('#canvas-toolbar').isVisible(), false);
     assert.equal(await page.locator('#action-bar').isVisible(), false);
     assert.equal(await page.locator('a[href="/docs"]').isVisible(), false);
+    await page.locator('#stage').dispatchEvent('dragenter');
+    assert.equal(await page.locator('#empty-state').evaluate(el => el.classList.contains('drag')), true);
+    await page.screenshot({ path: path.join(out, 'portal-drag.png'), fullPage: true });
+    await page.locator('#stage').dispatchEvent('dragleave');
+    assert.equal(await page.locator('#empty-state').evaluate(el => el.classList.contains('drag')), false);
     await page.screenshot({ path: path.join(out, 'desktop-empty.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -47,7 +52,7 @@ function pixels(svg) {
     await page.locator('#file-single').setInputFiles(input);
     await page.waitForFunction(() => state.inspect !== null);
     assert.equal(await page.locator('#sidebar').isVisible(), false);
-    await page.locator('#check-go').click();
+    // Clean uploads progress from inspection to conversion without an extra confirmation.
     await page.waitForFunction(() => state.phase === 'result', null, { timeout: 90000 });
     assert.equal(await page.locator('#sidebar').isVisible(), true);
     assert.equal(await page.locator('#param-card').getAttribute('open'), null);
@@ -204,7 +209,8 @@ function pixels(svg) {
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(out, 'mobile-artwork.png'), fullPage: true });
     assert.deepEqual(errors, []);
-    const report = { realUploadConversion: true, hiddenInitialSettings: true, rightPanel: geometry, colorEditExportMatches: true,
+    const report = { realUploadConversion: true, automaticCleanUpload: true, dragFeedback: true,
+      hiddenInitialSettings: true, rightPanel: geometry, colorEditExportMatches: true,
       hiddenLayerChangesPixels: true, exactReset: true, editedHistory: true, responsiveBreakpoints: true,
       mobileNoOverflow: true, staleParameterRestore: true,
       specialSvg: special, inspectionViews: true, batchFormatSelector: true, batchConversionAndZip: true, realArtworkPreview: true, pageErrors: errors };

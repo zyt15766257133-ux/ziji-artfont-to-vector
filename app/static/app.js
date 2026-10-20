@@ -659,7 +659,7 @@ function switchView(view) {
 }
 
 /* ------------------------------------------------------------ 转换流程 */
-async function inspectFile(file) {
+async function inspectFile(file, opts = {}) {
   saveLayerHistory();
   if (state.jobId) {
     fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
@@ -698,6 +698,11 @@ async function inspectFile(file) {
     state.inspect = data;
     $('#inspect-preview').src = state.sourceUrl;
     renderInspect(data);
+    const q = data.quality || {};
+    const needsConfirmation = (data.warnings || []).length > 0
+      || (q.invalid_reasons || []).length > 0
+      || q.severity === 'error';
+    if (opts.auto && (!needsConfirmation || opts.trustedSample)) setTimeout(() => startConvert(), 180);
   } catch (err) {
     toast(`预检失败：${err.message}`, 'bad', 5000);
     setPhase('empty');
@@ -1288,7 +1293,7 @@ function bindTips() {
 /* ------------------------------------------------------------ 素材入口 */
 function pickFile() { $('#file-single').click(); }
 
-function useFile(file) {
+function useFile(file, opts = { auto: true }) {
   if (!file) return;
   if (!/image\/(png|jpeg|webp)/.test(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {
     toast('只支持 PNG / JPG / WEBP', 'bad');
@@ -1298,7 +1303,7 @@ function useFile(file) {
     toast(`文件 ${(file.size / 1048576).toFixed(1)}MB 超过 5MB 上限`, 'bad', 5000);
     return;
   }
-  inspectFile(file);
+  inspectFile(file, opts);
 }
 
 async function loadSample(name, opts = {}) {
@@ -1311,9 +1316,7 @@ async function loadSample(name, opts = {}) {
     const blob = await fetch(pick.url).then((r) => r.blob());
     const file = new File([blob], pick.file, { type: blob.type || 'image/png' });
     toast(`示例：${pick.style || pick.file}`);
-    useFile(file);
-    // 示例素材直接进入转换，方便演示；auto 为 false 时停在预检
-    if (auto) setTimeout(() => startConvert(), 60);
+    useFile(file, { auto, trustedSample: true });
   } catch (err) {
     toast(`示例载入失败：${err.message}`, 'bad', 5000);
   }
@@ -1525,6 +1528,16 @@ function bind() {
     if (!items.length) return;
     const file = items[0].getAsFile();
     if (file) { useFile(file); toast('已粘贴剪贴板图片'); }
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (state.phase !== 'empty') return;
+    const rect = stage.getBoundingClientRect();
+    stage.style.setProperty('--pointer-x', `${((e.clientX - rect.left) / rect.width - .5) * 18}px`);
+    stage.style.setProperty('--pointer-y', `${((e.clientY - rect.top) / rect.height - .5) * 14}px`);
+  });
+  stage.addEventListener('pointerleave', () => {
+    stage.style.setProperty('--pointer-x', '0px');
+    stage.style.setProperty('--pointer-y', '0px');
   });
 
   // 动作条
