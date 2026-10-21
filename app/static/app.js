@@ -88,7 +88,8 @@ const STAGE_TEXT = {
 
 const state = {
   mode: 'single',
-  phase: 'empty',          // empty | inspect | converting | result
+  phase: 'empty',          // empty | checking | inspect (manual retry) | converting | result
+  editorTool: null,
   stale: false,            // 结果来自旧参数
   preset: 'fidelity',
   result: null,            // 当前结果（含 svg / metrics）
@@ -103,6 +104,136 @@ const state = {
   layerEditor: null, editedSvg: null, layerLimit: 60, layerFrame: null,
   historyOnly: false, historyItem: null,
 };
+
+/* ------------------------------------------------------------ 页内返回与前进 */
+let pageSession;
+const pageEntries = [];
+const pageWorkspaces = new Map();
+let pageIndex = 0, workspaceSequence = 0, applyingPage = false, pageNavigationReady = false;
+let conversionVersion = 0;
+
+function rememberWorkspace() {
+  if (!state.navigationId || state.phase !== 'result') return;
+  const keys = ['file', 'fileName', 'inspect', 'result', 'paramsUsed', 'layerEditor', 'editedSvg',
+    'layerLimit', 'historyOnly', 'historyItem', 'view', 'fmt', 'stale'];
+  const snapshot = Object.fromEntries(keys.map(key => [key, state[key]]));
+  snapshot.controls = { ...readParams(),
+    ...Object.fromEntries(PARAM_IDS.map(id => [id, Number($(`#${id}`).value)])),
+    glyph_count: $('#glyph_count').value, spot_colors: $('#spot_colors').value,
+    auto_verify: !$('#auto_verify').classList.contains('off'),
+    strict_input: !$('#strict_input').classList.contains('off'),
+    soft_effects: !$('#soft_effects').classList.contains('off'),
+  };
+  pageWorkspaces.set(state.navigationId, snapshot);
+}
+
+function currentPage() {
+  if (state.mode === 'batch') return { page: 'batch' };
+  if (state.phase === 'empty') return { page: 'home' };
+  return { page: 'editor', id: state.navigationId, tool: state.phase === 'result' ? state.editorTool : null };
+}
+
+function syncPageNavigation() {
+  if (!pageNavigationReady || applyingPage) return;
+  rememberWorkspace();
+  const route = currentPage();
+  const previous = pageEntries[pageIndex];
+  if (JSON.stringify(route) === JSON.stringify(previous)) return;
+  // Switching tools occupies one level; reading/converting/result share one level too.
+  const replace = previous?.page === 'editor' && (
+    (route.page === 'editor' && route.id === previous.id && previous.tool && route.tool)
+    || (route.page === 'home' && !pageWorkspaces.has(previous.id)));
+  if (!replace) {
+    pageIndex += 1;
+    pageEntries.length = pageIndex;
+  }
+  pageEntries[pageIndex] = route;
+  const entry = { zijiPage: pageSession, index: pageIndex };
+  window.history[replace ? 'replaceState' : 'pushState'](entry, '');
+}
+
+function stopSingleNavigationJob() {
+  conversionVersion += 1;
+  if (state.jobId) fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
+  state.jobId = null;
+  clearTimeout(state.pollTimer);
+}
+
+function restoreWorkspace(id, tool) {
+  const snapshot = pageWorkspaces.get(id);
+  if (!snapshot) return false;
+  stopSingleNavigationJob();
+  if (state.layerFrame) cancelAnimationFrame(state.layerFrame);
+  for (const url of new Set([state.sourceUrl, state.alignedUrl, state.previewUrl])) {
+    if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+  }
+  const { controls, ...saved } = snapshot;
+  Object.assign(state, saved, { navigationId: id, mode: 'single', phase: 'result', editorTool: tool,
+    layerFrame: null, sourceUrl: null, alignedUrl: null, previewUrl: null });
+  state.paramsUsed = controls;
+  restoreParams();
+  state.paramsUsed = saved.paramsUsed;
+  state.stale = saved.stale;
+  state.sourceUrl = state.file ? URL.createObjectURL(state.file) : null;
+  if (state.sourceUrl) $('#inspect-preview').src = state.sourceUrl;
+  else $('#inspect-preview').removeAttribute('src');
+  state.alignedUrl = !state.historyOnly && state.result.source_png
+    ? URL.createObjectURL(base64ToBlob(state.result.source_png, 'image/png')) : state.sourceUrl;
+  for (const selector of ['#ls-in', '#side-in']) {
+    if (state.alignedUrl) $(selector).src = state.alignedUrl;
+    else $(selector).removeAttribute('src');
+  }
+  if (state.result.preview_png) $('#diff-img').src = `data:image/png;base64,${state.result.preview_png}`;
+  else $('#diff-img').removeAttribute('src');
+  renderColorLayers();
+  refreshVectorPreview();
+  renderMetrics(state.result);
+  $$('#view-group button').forEach(button => button.classList.toggle('on', button.dataset.view === state.view));
+  $$('#format-group button').forEach(button => button.classList.toggle('on', button.dataset.fmt === state.fmt));
+  return true;
+}
+
+function initPageNavigation() {
+  pageSession = crypto.randomUUID();
+  pageEntries[0] = { page: 'home' };
+  window.history.replaceState({ zijiPage: pageSession, index: 0 }, '');
+  pageNavigationReady = true;
+  window.addEventListener('popstate', event => {
+    if (event.state?.zijiPage !== pageSession) return;
+    saveLayerHistory();
+    rememberWorkspace();
+    const previousTool = state.editorTool;
+    pageIndex = event.state.index;
+    let route = pageEntries[pageIndex] || { page: 'home' };
+    applyingPage = true;
+    try {
+      closeDrawer();
+      closeSampleModal();
+      $('#clear-pop').hidden = true;
+      if (route.page === 'editor' && !restoreWorkspace(route.id, route.tool)) {
+        // A cancelled read has no result to restore. Forward returns to the upload page.
+        route = pageEntries[pageIndex] = { page: 'home' };
+      }
+      if (route.page === 'home') {
+        stopSingleNavigationJob();
+        state.phase = 'empty';
+        state.editorTool = null;
+      }
+      switchMode(route.page === 'batch' ? 'batch' : 'single');
+    } finally { applyingPage = false; }
+    requestAnimationFrame(() => {
+      if (state.mode !== 'single' || state.phase !== 'result') return;
+      fitView();
+      if (state.editorTool) $('#tool-back').focus({ preventScroll: true });
+      else $(`#editor-tools [data-tool="${previousTool || 'colors'}"]`).focus({ preventScroll: true });
+    });
+  });
+}
+
+function goPageBack() {
+  if (pageIndex > 0) window.history.back();
+  else { state.phase = 'empty'; switchMode('single'); }
+}
 
 /* ------------------------------------------------------------ 基础工具 */
 function toast(message, kind = '', ms = 3600) {
@@ -266,6 +397,7 @@ function render() {
   $('#sidebar-toggle').hidden = !single || phase !== 'result';
   $('#toolbar-download').hidden = !single || phase !== 'result';
   $('#editor-close').hidden = !single || phase !== 'result';
+  $('#page-back').hidden = single && phase === 'empty';
   $('#color-layer-card').hidden = !single || phase !== 'result';
   $('#settings-scope').textContent = single ? '当前图片' : '应用于整个队列';
   $('#batch-format').hidden = single;
@@ -282,7 +414,8 @@ function render() {
   // 画布四态
   $('#empty-state').hidden = !(phase === 'empty');
   $('#inspect-preview').hidden = !(phase === 'inspect');
-  $('#loader').hidden = !(phase === 'converting');
+  $('#loader').hidden = !['checking', 'converting'].includes(phase);
+  $('#loader-title').textContent = phase === 'checking' ? '正在读取图片…' : '正在矢量化…';
   const showResultView = phase === 'result';
   $('#layer-vector').hidden = !(showResultView && state.view === 'vector');
   $('#layer-slider').hidden = !(showResultView && state.view === 'slider');
@@ -295,6 +428,9 @@ function render() {
   $('#metrics-note').textContent = edited
     ? '以下为颜色图层编辑前的转换记录。当前改色和隐藏操作尚未重新评估。'
     : '这些自动诊断用于辅助检查，请结合画布确认效果。';
+  if (showResultView && !state.historyOnly && state.inspect?.warnings?.length) {
+    $('#metrics-note').textContent += ` 素材提醒：${state.inspect.warnings.join('；')}`;
+  }
   $('#view-group [data-view="diff"]').disabled = edited || !state.result?.preview_png;
   $$('#view-group [data-view="slider"], #view-group [data-view="side"]').forEach(button => {
     button.disabled = state.historyOnly;
@@ -320,6 +456,71 @@ function render() {
 
   // 结果区整体降级
   $('#stage').style.opacity = (phase === 'result' && stale) ? '.62' : '';
+  renderEditorTools();
+  syncPageNavigation();
+}
+
+const EDITOR_TOOLS = {
+  colors: ['color-layer-card', '颜色图层'],
+  presets: ['preset-card', '转换档位'],
+  advanced: ['param-card', '高级参数'],
+  source: ['source-card', '原图颜色'],
+  metrics: ['result-details', '转换详情'],
+  export: ['export-tool', '下载与导出'],
+};
+let editorActionHome, editorVerdictHome;
+
+function renderEditorTools() {
+  const editor = state.mode === 'single' && state.phase === 'result';
+  const tool = editor ? state.editorTool : null;
+  const sidebar = $('#sidebar');
+  sidebar.dataset.tool = tool || 'menu';
+  $('#editor-tools').hidden = !editor || !!tool;
+  $('#editor-footer').hidden = !editor;
+  $('#tool-back').hidden = !editor || !tool;
+  $('#editor-panel-title').textContent = tool ? EDITOR_TOOLS[tool][1] : editor ? '优化结果' : '批量设置';
+  $('#tool-color-count').textContent = state.layerEditor?.layers.length || 0;
+  for (const [key, [id]] of Object.entries(EDITOR_TOOLS)) {
+    const panel = $(`#${id}`);
+    panel.hidden = editor ? key !== tool : !['presets', 'advanced'].includes(key);
+    if (editor && panel.tagName === 'DETAILS') panel.open = key === tool;
+    $(`[data-tool="${key}"]`).setAttribute('aria-expanded', String(editor && key === tool));
+  }
+  $('#rerun-convert').hidden = !editor || !['presets', 'advanced'].includes(tool);
+  // Keep a single set of export controls and quality messages in all screen states.
+  if (!editorActionHome) {
+    editorActionHome = document.createComment('single-file actions');
+    $('#action-bar').before(editorActionHome);
+    editorVerdictHome = document.createComment('conversion verdict');
+    $('#verdict').before(editorVerdictHome);
+  }
+  if (editor) {
+    if ($('#action-bar').parentElement.id !== 'export-tool') $('#export-tool').append($('#action-bar'));
+    if ($('#verdict').parentElement.id !== 'result-details') $('#metrics-note').before($('#verdict'));
+    $('#editor-image-meta').textContent = `${state.fileName} · ${state.result?.size?.width || '?'} × ${state.result?.size?.height || '?'} px`;
+  } else {
+    if ($('#action-bar').parentElement.id === 'export-tool') editorActionHome.after($('#action-bar'));
+    if ($('#verdict').parentElement.id === 'result-details') editorVerdictHome.after($('#verdict'));
+  }
+  $('#editor-image-meta').hidden = !editor;
+}
+
+function openEditorTool(tool, focus = true) {
+  if (tool && !EDITOR_TOOLS[tool]) return;
+  if (!tool && state.editorTool && pageEntries[pageIndex - 1]?.page === 'editor'
+      && pageEntries[pageIndex - 1].id === state.navigationId && !pageEntries[pageIndex - 1].tool) {
+    goPageBack();
+    return;
+  }
+  if (document.body.classList.contains('sidebar-collapsed')) $('#sidebar-toggle').click();
+  const previousTool = state.editorTool;
+  state.editorTool = tool;
+  render();
+  $('#sidebar').scrollTop = 0;
+  if (focus) {
+    if (tool) $('#tool-back').focus({ preventScroll: true });
+    else $(`#editor-tools [data-tool="${previousTool || 'colors'}"]`).focus({ preventScroll: true });
+  }
 }
 
 function renderVerdict() {
@@ -340,11 +541,11 @@ function renderVerdict() {
       ? `${[...(inspect?.warnings || []), ...(q.invalid_reasons || []).map(reasonText)].slice(0, 2).join('；')}。可以继续转换，效果可能受影响。`
       : '素材干净清晰，可以直接转换。';
     ms = '预检完成';
-  } else if (phase === 'converting') {
+  } else if (phase === 'checking' || phase === 'converting') {
     tone = 'info'; ico = '⟳';
-    title = `正在矢量化　${state.fileName}`;
-    body = STAGE_TEXT[state.stage || 'preprocess'];
-    ms = '转换中';
+    title = `${phase === 'checking' ? '正在读取图片' : '正在矢量化'}　${state.fileName}`;
+    body = phase === 'checking' ? '读取完成后自动开始转换。' : STAGE_TEXT[state.stage || 'preprocess'];
+    ms = phase === 'checking' ? '读取中' : '转换中';
   } else if (phase === 'result' && stale) {
     tone = 'warn'; ico = '!';
     title = '参数已改动，重新转换后生效';
@@ -410,6 +611,9 @@ function renderActions() {
   } else if (phase === 'inspect') {
     primary.textContent = '继续转换';
     primary.disabled = false;
+  } else if (phase === 'checking') {
+    primary.textContent = '正在读取图片…';
+    primary.disabled = true;
   } else if (phase === 'converting') {
     primary.textContent = '取消转换';
     primary.disabled = false;
@@ -425,7 +629,8 @@ function renderActions() {
 
   $('#file-name').textContent = state.fileName || '还没有素材';
   if (phase === 'empty') $('#file-meta').textContent = '选好文件后自动进入预检与转换';
-  else if (phase === 'inspect') $('#file-meta').textContent = '预检完成，等待确认';
+  else if (phase === 'checking') $('#file-meta').textContent = '读取完成后自动转换';
+  else if (phase === 'inspect') $('#file-meta').textContent = '素材已保留，可重试转换';
   else if (phase === 'converting') $('#file-meta').textContent = '按 Esc 取消';
   else {
     const d = state.result || {};
@@ -665,6 +870,9 @@ function switchView(view) {
 /* ------------------------------------------------------------ 转换流程 */
 async function inspectFile(file, opts = {}) {
   saveLayerHistory();
+  rememberWorkspace();
+  state.navigationId = ++workspaceSequence;
+  const requestVersion = ++conversionVersion;
   if (state.jobId) {
     fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
     state.jobId = null;
@@ -684,7 +892,9 @@ async function inspectFile(file, opts = {}) {
   state.fileName = file.name;
   state.sourceUrl = URL.createObjectURL(file);
   state.inspect = null;
-  setPhase('inspect');
+  const auto = opts.auto !== false;
+  setPhase(auto ? 'checking' : 'inspect');
+  if (auto) updateLoader('preprocess', 0);
   $('#check-thumb').src = state.sourceUrl;
   $('#check-title').textContent = file.name;
   $('#check-sub').textContent = '正在预检素材…';
@@ -694,6 +904,8 @@ async function inspectFile(file, opts = {}) {
     fd.append('file', file);
     const res = await fetch('/api/inspect', { method: 'POST', body: fd });
     const data = await res.json();
+    if (requestVersion !== conversionVersion || state.file !== file || !['checking', 'inspect'].includes(state.phase)) return;
+    if (!res.ok) throw new Error(data.detail || data.error || '读取图片失败');
     if (data.problems?.length) {
       toast(data.problems.join('；'), 'bad', 5000);
       setPhase('empty');
@@ -702,12 +914,9 @@ async function inspectFile(file, opts = {}) {
     state.inspect = data;
     $('#inspect-preview').src = state.sourceUrl;
     renderInspect(data);
-    const q = data.quality || {};
-    const needsConfirmation = (data.warnings || []).length > 0
-      || (q.invalid_reasons || []).length > 0
-      || q.severity === 'error';
-    if (opts.auto && (!needsConfirmation || opts.trustedSample)) setTimeout(() => startConvert(), 180);
+    if (auto) await startConvert();
   } catch (err) {
+    if (requestVersion !== conversionVersion || state.file !== file || !['checking', 'inspect'].includes(state.phase)) return;
     toast(`预检失败：${err.message}`, 'bad', 5000);
     setPhase('empty');
   }
@@ -747,6 +956,7 @@ function renderInspect(data) {
 async function startConvert() {
   if (!state.file || state.historyOnly) return;
   if (state.jobId) return;
+  const requestVersion = ++conversionVersion;
   saveLayerHistory();
   state.paramsUsed = { ...readParams() };
   state.startedAt = performance.now();
@@ -758,11 +968,16 @@ async function startConvert() {
     fd.append('with_preview', 'true');
     const res = await fetch('/api/jobs', { method: 'POST', body: fd });
     const response = await res.json();
+    if (requestVersion !== conversionVersion) {
+      if (response.job_id) fetch(`/api/jobs/${response.job_id}`, { method: 'DELETE' }).catch(() => {});
+      return;
+    }
     if (!res.ok || !response.job_id) throw new Error(response.detail || response.error || '服务返回异常');
     const { job_id } = response;
     state.jobId = job_id;
     pollJob(job_id);
   } catch (err) {
+    if (requestVersion !== conversionVersion) return;
     toast(`无法开始转换：${err.message}`, 'bad', 5000);
     setPhase('inspect');
   }
@@ -817,6 +1032,7 @@ function updateLoader(stage, elapsedMs) {
 }
 
 function cancelJob() {
+  conversionVersion += 1;
   if (state.jobId) {
     fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
     state.jobId = null;
@@ -829,6 +1045,8 @@ function cancelJob() {
 /* 关闭回空态：结果已入「最近转换」，无需确认 */
 function closeToEmpty() {
   saveLayerHistory();
+  rememberWorkspace();
+  conversionVersion += 1;
   if (state.jobId) {
     fetch(`/api/jobs/${state.jobId}`, { method: 'DELETE' }).catch(() => {});
     state.jobId = null;
@@ -861,6 +1079,7 @@ function closeToEmpty() {
 }
 
 function showResult(data) {
+  state.editorTool = null;
   state.result = data;
   state.stale = false;
   state.historyOnly = false;
@@ -957,6 +1176,9 @@ function openHistory(i) {
   if (!it) return;
   if (state.jobId) { toast('请先取消当前转换，再打开历史记录', 'warn'); return; }
   saveLayerHistory();
+  rememberWorkspace();
+  state.navigationId = ++workspaceSequence;
+  state.editorTool = null;
   state.historyItem = it;
   state.file = null;
   state.historyOnly = true;
@@ -1022,6 +1244,14 @@ function queueVerdict(item) {
 
 function renderQueue() {
   const q = state.queue;
+  document.body.dataset.queue = q.length ? 'populated' : 'empty';
+  $$('.batch-queue-count').forEach(badge => {
+    badge.hidden = !q.length;
+    badge.textContent = String(q.length);
+  });
+  $('#batch-queue-card').hidden = !q.length;
+  $('#batch-verdict').hidden = !q.length;
+  $('#batch-action-bar').hidden = !q.length;
   const filtered = q.map((item, i) => ({ item, i })).filter(({ item }) => {
     if (state.batchFilter === 'fail') return item.status === 'bad';
     if (state.batchFilter === 'done') return item.status === 'ok';
@@ -1065,6 +1295,7 @@ function renderQueue() {
   $('#queue-sub').textContent = `完成 ${done} · 失败 ${failed} · 输出 ${state.fmt.toUpperCase()}`;
   $('#batch-ms').textContent = q.length ? `完成 ${done} / ${q.length}` : '队列为空';
   $('#batch-run').disabled = state.batchRunning || !q.some((x) => x.status === 'idle');
+  $('#batch-run').textContent = state.batchRunning ? '正在转换…' : `开始转换（${q.filter(item => item.status === 'idle').length} 张）`;
   $('#batch-zip').hidden = !done;
   $('#batch-zip').disabled = state.batchRunning;
   $('#batch-run').hidden = !!done && !q.some((x) => x.status === 'idle');
@@ -1320,7 +1551,7 @@ async function loadSample(name, opts = {}) {
     const blob = await fetch(pick.url).then((r) => r.blob());
     const file = new File([blob], pick.file, { type: blob.type || 'image/png' });
     toast(`示例：${pick.style || pick.file}`);
-    useFile(file, { auto, trustedSample: true });
+    useFile(file, { auto });
   } catch (err) {
     toast(`示例载入失败：${err.message}`, 'bad', 5000);
   }
@@ -1356,7 +1587,11 @@ async function renderSampleGrid() {
 /* ------------------------------------------------------------ 事件绑定 */
 function switchMode(mode) {
   state.mode = mode;
-  $$('#mode-group button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+  $$('#mode-group button').forEach((b) => {
+    const selected = b.dataset.mode === mode;
+    b.classList.toggle('on', selected);
+    b.setAttribute('aria-pressed', String(selected));
+  });
   render();
   renderQueue();
   $('#sidebar').scrollTop = 0;
@@ -1365,6 +1600,8 @@ function switchMode(mode) {
 
 function bind() {
   // 顶栏
+  $('#page-back').addEventListener('click', goPageBack);
+  $('#editor-back').addEventListener('click', goPageBack);
   $('#mode-group').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (btn) switchMode(btn.dataset.mode);
@@ -1411,7 +1648,20 @@ function bind() {
   $('#spot_colors').addEventListener('input', markParamsChanged);
   $('#restore-params').addEventListener('click', restoreParams);
   $('#rerun-convert').addEventListener('click', startConvert);
-  $('#toolbar-download').addEventListener('click', downloadResult);
+  $('#toolbar-download').addEventListener('click', () => openEditorTool('export'));
+  $('#menu-download').addEventListener('click', () => openEditorTool('export'));
+  $('#tool-back').addEventListener('click', () => openEditorTool(null));
+  $('#editor-tools').addEventListener('click', e => {
+    const button = e.target.closest('[data-tool]');
+    if (button) openEditorTool(button.dataset.tool);
+  });
+  $('#editor-repick').addEventListener('click', pickFile);
+  $('#editor-history').addEventListener('click', openDrawer);
+  $('#editor-batch').addEventListener('click', () => switchMode('batch'));
+  $('#zoom-actual').addEventListener('click', () => {
+    state.zoom = (state.result?.size?.width || state.fitWidth) / state.fitWidth;
+    applyZoom();
+  });
   $('#editor-close').addEventListener('click', closeToEmpty);
   $('#sidebar-toggle').addEventListener('click', () => {
     const collapsed = document.body.classList.toggle('sidebar-collapsed');
@@ -1596,7 +1846,22 @@ function bind() {
     renderQueue();
   });
   $('#batch-add').addEventListener('click', () => $('#file-batch').click());
+  $('#batch-add-more').addEventListener('click', () => $('#file-batch').click());
   $('#batch-folder').addEventListener('click', () => $('#file-folder').click());
+  const batchDrop = $('#batch-drop-zone');
+  ['dragenter', 'dragover'].forEach(event => batchDrop.addEventListener(event, e => {
+    e.preventDefault();
+    batchDrop.classList.add('is-dragging');
+  }));
+  batchDrop.addEventListener('dragleave', e => {
+    if (!batchDrop.contains(e.relatedTarget)) batchDrop.classList.remove('is-dragging');
+  });
+  batchDrop.addEventListener('drop', e => {
+    e.preventDefault();
+    batchDrop.classList.remove('is-dragging');
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length) addToQueue(files);
+  });
   $('#file-batch').addEventListener('change', (e) => { addToQueue([...e.target.files]); e.target.value = ''; });
   $('#file-folder').addEventListener('change', (e) => { addToQueue([...e.target.files]); e.target.value = ''; });
   $('#batch-run').addEventListener('click', () => runBatch());
@@ -1624,12 +1889,13 @@ function bind() {
     if (e.key !== 'Escape') return;
     if ($('#help-menu').open) { $('#help-menu').open = false; return; }
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
-    if (!$('#tip-pop')?.hidden) { hideTip(); return; }
+    if ($('#tip-pop') && !$('#tip-pop').hidden) { hideTip(); return; }
     if (!$('#sample-modal').hidden) { closeSampleModal(); return; }
     if (!$('#clear-pop').hidden) { $('#clear-pop').hidden = true; return; }
     if (!$('#drawer').hidden) { closeDrawer(); return; }
+    if (state.mode === 'single' && state.phase === 'result' && state.editorTool) { openEditorTool(null); return; }
     if (state.phase === 'converting') cancelJob();
-    else if (state.phase === 'inspect' || state.phase === 'result') closeToEmpty();
+    else if (['checking', 'inspect', 'result'].includes(state.phase)) closeToEmpty();
   });
 
   bindTips();
@@ -1675,6 +1941,7 @@ async function addSamplesToQueue(names) {
 
 /* ------------------------------------------------------------ 初始化 */
 async function init() {
+  initPageNavigation();
   bind();
 
   fetch('/api/health')
