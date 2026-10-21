@@ -262,6 +262,10 @@ function render() {
   $('#welcome').hidden = !(single && phase === 'empty');
   $('#quick-samples').hidden = !(single && phase === 'empty');
   $('#sidebar').hidden = single && phase !== 'result';
+  $('#editor-panel-title').textContent = single ? '优化结果' : '批量设置';
+  $('#sidebar-toggle').hidden = !single || phase !== 'result';
+  $('#toolbar-download').hidden = !single || phase !== 'result';
+  $('#editor-close').hidden = !single || phase !== 'result';
   $('#color-layer-card').hidden = !single || phase !== 'result';
   $('#settings-scope').textContent = single ? '当前图片' : '应用于整个队列';
   $('#batch-format').hidden = single;
@@ -1407,6 +1411,17 @@ function bind() {
   $('#spot_colors').addEventListener('input', markParamsChanged);
   $('#restore-params').addEventListener('click', restoreParams);
   $('#rerun-convert').addEventListener('click', startConvert);
+  $('#toolbar-download').addEventListener('click', downloadResult);
+  $('#editor-close').addEventListener('click', closeToEmpty);
+  $('#sidebar-toggle').addEventListener('click', () => {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    const button = $('#sidebar-toggle');
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.setAttribute('aria-label', collapsed ? '展开编辑工具' : '收起编辑工具');
+    button.title = collapsed ? '展开编辑工具' : '收起编辑工具';
+    button.textContent = collapsed ? '›' : '‹';
+    requestAnimationFrame(fitView);
+  });
   $('#color-layer-list').addEventListener('click', e => {
     if (e.target.closest('#show-all-layers')) {
       state.layerLimit = state.layerEditor?.layers.length || 60;

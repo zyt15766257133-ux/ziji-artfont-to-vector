@@ -39,6 +39,11 @@
   <div class="shell">
     <!-- 侧栏参数 -->
     <aside class="sidebar" id="sidebar" hidden aria-label="转换设置">
+      <div class="editor-panel-head">
+        <div><span>编辑工具</span><strong id="editor-panel-title">优化结果</strong></div>
+        <span class="collapsed-label" aria-hidden="true">编辑</span>
+        <button class="panel-collapse" id="sidebar-toggle" aria-label="收起编辑工具" aria-expanded="true" title="收起编辑工具">‹</button>
+      </div>
       <section class="card layer-card" id="color-layer-card" hidden>
         <div class="panel-heading"><h2>颜色图层</h2><span id="layer-count" class="panel-count">0</span></div>
         <p class="panel-caption">点击色块改色，切换眼睛显示或隐藏。</p>
@@ -99,6 +104,7 @@
         <button class="btn ghost sm" id="restore-params" style="width:100%;margin-top:14px" hidden>恢复本次转换的参数</button>
         <p class="hint" id="param-hint">默认设置适合先看效果。参数修改后，重新转换生效。</p>
       </details>
+      <details class="result-details card" id="result-details" hidden><summary>转换详情 <span>质量诊断</span></summary><p class="details-note" id="metrics-note">这些自动诊断用于辅助检查，请结合画布确认效果。</p><div class="metrics" id="metric-strip" hidden></div></details>
       <button class="btn rerun-btn" id="rerun-convert" hidden>重新转换</button>
       <div class="batch-format" id="batch-format" hidden><label for="batch-output-format">批量输出格式</label><select id="batch-output-format"><option value="svg">SVG</option><option value="pdf">PDF</option><option value="eps">EPS</option><option value="ai">AI</option></select></div>
     </aside>
@@ -143,6 +149,9 @@
             <button class="iconbtn" id="zoom-out" title="缩小" aria-label="缩小">−</button>
             <button class="iconbtn" id="zoom-reset">适应</button>
             <button class="iconbtn" id="zoom-in" title="放大" aria-label="放大">＋</button>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <button class="btn primary toolbar-download" id="toolbar-download">↓ 下载</button>
+            <button class="iconbtn editor-close" id="editor-close" title="关闭结果" aria-label="关闭结果">×</button>
           </div>
         </div>
 
@@ -225,8 +234,6 @@
         </div>
         <button class="btn primary" id="act-primary" disabled>下载 SVG</button>
       </div>
-
-      <details class="result-details card" id="result-details" hidden><summary>转换详情 <span>质量诊断、节点与原图颜色</span></summary><p class="details-note" id="metrics-note">这些自动诊断用于辅助检查，请结合画布确认效果。</p><div class="metrics" id="metric-strip" hidden></div></details>
 
       <!-- 批量 -->
       <div id="pane-batch" hidden style="display:flex;flex-direction:column;gap:16px">

@@ -62,7 +62,20 @@ function pixels(svg) {
       const panel = document.querySelector('#sidebar').getBoundingClientRect();
       return { canvas: { x: canvas.x, right: canvas.right, width: canvas.width, height: canvas.height }, panel: { x: panel.x, width: panel.width } };
     });
-    assert(geometry.canvas.right < geometry.panel.x && geometry.canvas.width > 900 && geometry.canvas.height > 550, JSON.stringify(geometry));
+    assert(geometry.panel.x + geometry.panel.width < geometry.canvas.x
+      && geometry.canvas.width > 900 && geometry.canvas.height > 650, JSON.stringify(geometry));
+    await page.locator('#sidebar-toggle').click();
+    await page.waitForTimeout(260);
+    const collapsedGeometry = await page.evaluate(() => {
+      const canvas = document.querySelector('#canvas').getBoundingClientRect();
+      const panel = document.querySelector('#sidebar').getBoundingClientRect();
+      return { canvasWidth: canvas.width, panelWidth: panel.width };
+    });
+    assert(collapsedGeometry.panelWidth < 70 && collapsedGeometry.canvasWidth > geometry.canvas.width + 150,
+      JSON.stringify(collapsedGeometry));
+    assert.equal(await page.locator('#sidebar-toggle').getAttribute('aria-expanded'), 'false');
+    await page.locator('#sidebar-toggle').click();
+    await page.waitForTimeout(260);
     assert.equal(await page.locator('[data-layer-color]').count(), 2);
     const original = await page.evaluate(() => currentSvg());
     await page.waitForFunction(() => [...document.querySelectorAll('#ls-out,#side-out')].every(img => img.complete));
@@ -78,7 +91,7 @@ function pixels(svg) {
     assert.equal(await page.locator('#layer-vector').isVisible(), true);
     assert.equal(await page.locator('[data-view="diff"]').isDisabled(), true);
     const downloadEvent = page.waitForEvent('download');
-    await page.locator('#act-primary').click();
+    await page.locator('#toolbar-download').click();
     const download = await downloadEvent;
     const downloadedPath = path.join(out, 'edited-download.svg');
     await download.saveAs(downloadedPath);
@@ -137,9 +150,9 @@ function pixels(svg) {
     const tabletWide = await page.evaluate(() => {
       const panel = document.querySelector('#sidebar').getBoundingClientRect();
       const work = document.querySelector('#work').getBoundingClientRect();
-      return { panelLeft: panel.left, workRight: work.right };
+      return { panelRight: panel.right, workLeft: work.left };
     });
-    assert(tabletWide.panelLeft >= tabletWide.workRight);
+    assert(tabletWide.panelRight <= tabletWide.workLeft);
     await page.setViewportSize({ width: 800, height: 900 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     const tabletStack = await page.evaluate(() => {
@@ -210,7 +223,8 @@ function pixels(svg) {
     await page.screenshot({ path: path.join(out, 'mobile-artwork.png'), fullPage: true });
     assert.deepEqual(errors, []);
     const report = { realUploadConversion: true, automaticCleanUpload: true, dragFeedback: true,
-      hiddenInitialSettings: true, rightPanel: geometry, colorEditExportMatches: true,
+      hiddenInitialSettings: true, leftEditorPanel: geometry, collapsibleEditorPanel: collapsedGeometry,
+      colorEditExportMatches: true,
       hiddenLayerChangesPixels: true, exactReset: true, editedHistory: true, responsiveBreakpoints: true,
       mobileNoOverflow: true, staleParameterRestore: true,
       specialSvg: special, inspectionViews: true, batchFormatSelector: true, batchConversionAndZip: true, realArtworkPreview: true, pageErrors: errors };
